@@ -503,8 +503,8 @@ async function loadPagosResumen() {
 
     html += '<h3 class="section-subtitle">Transacciones por Dia</h3>';
     html += '<div class="dia-list">';
-    for (const d of d.por_dia) {
-      html += '<div class="dia-item"><span class="dia-fecha">' + formatDateShort(d.fecha) + '</span><span class="dia-cant">' + d.cantidad + ' trans.</span><span class="dia-valor">' + formatCOP(d.total_cop) + '</span></div>';
+    for (const dia of d.por_dia) {
+      html += '<div class="dia-item"><span class="dia-fecha">' + formatDateShort(dia.fecha) + '</span><span class="dia-cant">' + dia.cantidad + ' trans.</span><span class="dia-valor">' + formatCOP(dia.total_cop) + '</span></div>';
     }
     html += '</div>';
 

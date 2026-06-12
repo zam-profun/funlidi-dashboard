@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import time
 import difflib
 from datetime import datetime, timezone, timedelta
@@ -74,7 +75,7 @@ def _load_pagos_data():
                 "referencia": str(ref).strip() if ref else "",
                 "fecha": fecha_str,
                 "hora": hora_str,
-                "flayer": str(flayer).strip() if flayer else "",
+                "flayer": re.sub(r'\s+', ' ', str(flayer)).strip() if flayer else "",
                 "valor": int(valor) if isinstance(valor, (int, float)) else 0,
                 "archivo": fname,
             })
