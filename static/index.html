@@ -11,9 +11,15 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <span class="material-icons sidebar-logo">assignment</span>
-      <h1>FUNLIDI</h1>
+      <div class="sidebar-header-text">
+        <h1>FUNLIDI</h1>
+        <select id="moduleSelector" class="module-selector">
+          <option value="bot">FUNLIDI - BOT</option>
+          <option value="pagos">FUNLIDI - PAGOS</option>
+        </select>
+      </div>
     </div>
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" id="nav-bot">
       <button class="nav-btn active" data-section="registros">
         <span class="material-icons">list_alt</span>
         <span>Registros</span>
@@ -29,6 +35,28 @@
       <button class="nav-btn" data-section="descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-pagos" style="display:none">
+      <button class="nav-btn active" data-section="pagos-resumen">
+        <span class="material-icons">dashboard</span>
+        <span>Resumen</span>
+      </button>
+      <button class="nav-btn" data-section="pagos-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="pagos-flayer">
+        <span class="material-icons">category</span>
+        <span>Por Flayer</span>
+      </button>
+      <button class="nav-btn" data-section="pagos-personas">
+        <span class="material-icons">people</span>
+        <span>Personas</span>
+      </button>
+      <button class="nav-btn" data-section="pagos-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -203,6 +231,118 @@
           Descargar XLSX
         </button>
         <p class="download-info" id="downloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== PAGOS SECTIONS ========== -->
+
+    <section class="content-section" id="section-pagos-resumen">
+      <div id="pagosResumenContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando resumen de pagos...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-pagos-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Todos los registros de pago de FUNLIDI. Puedes filtrar por tipo de flayer y buscar por nombre, identificacion o referencia.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="pagosSearchInput" placeholder="Buscar por nombre, ID o referencia..." class="search-input">
+        </div>
+        <select id="pagosFlayerFilter" class="flayer-filter">
+          <option value="">Todos los flayers</option>
+        </select>
+        <span class="table-count" id="pagosTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="pagosTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombres y Apellidos</th>
+              <th>Referencia</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Flayer</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody id="pagosTableBody">
+            <tr class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando registros...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-pagos-flayer">
+      <div id="pagosFlayerContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando datos por flayer...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-pagos-personas">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Cada persona agrupada por su identificacion. Muestra el total gastado, los flayers que ha comprado y sus transacciones.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="pagosPersonasSearch" placeholder="Buscar por nombre o identificacion..." class="search-input">
+        </div>
+        <select id="pagosPersonasFlayer" class="flayer-filter">
+          <option value="">Todos los flayers</option>
+        </select>
+        <span class="table-count" id="pagosPersonasCount">0 personas</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="pagosPersonasTable">
+          <thead>
+            <tr>
+              <th>Identificacion</th>
+              <th>Nombres</th>
+              <th>Total Gastado</th>
+              <th>Transacciones</th>
+              <th>Flayers</th>
+              <th>Ultimo Pago</th>
+            </tr>
+          </thead>
+          <tbody id="pagosPersonasBody">
+            <tr class="empty-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando personas...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-pagos-estadisticas">
+      <div id="pagosStatsContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando estadisticas de pagos...</p>
+        </div>
       </div>
     </section>
   </main>

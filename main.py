@@ -1,7 +1,11 @@
 import os
 import io
+import time
 import difflib
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+
+import openpyxl
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -16,6 +20,102 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 COL_TZ = timezone(timedelta(hours=-5))
+
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_to_show")
+_PAGOS_CACHE = {"data": None, "mtime": 0}
+
+PAGOS_FILES = [
+    "EXCEL ACTIVACION PAGOS MARIA ELVIRA SUS.xlsx",
+    "EXCEL INFINITY - LOGISTICA - ARITA MARIA ELVIRA SUS.xlsx",
+]
+
+
+def _load_pagos_data():
+    latest_mtime = 0
+    for fname in PAGOS_FILES:
+        fpath = os.path.join(DATA_DIR, fname)
+        if os.path.exists(fpath):
+            mtime = os.path.getmtime(fpath)
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+    if latest_mtime == 0:
+        return []
+
+    if _PAGOS_CACHE["data"] is not None and latest_mtime <= _PAGOS_CACHE["mtime"]:
+        return _PAGOS_CACHE["data"]
+
+    records = []
+    seen_aggregates = set()
+    for fname in PAGOS_FILES:
+        fpath = os.path.join(DATA_DIR, fname)
+        if not os.path.exists(fpath):
+            continue
+        wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if row[0] is None:
+                break
+            num, ident, nombres, ref, fecha, hora, flayer, valor = row[0:8]
+            fecha_str = ""
+            if fecha:
+                try:
+                    fecha_str = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
+                except Exception:
+                    fecha_str = str(fecha)
+            hora_str = ""
+            if hora:
+                try:
+                    hora_str = hora.strftime("%H:%M") if hasattr(hora, "strftime") else str(hora)
+                except Exception:
+                    hora_str = str(hora)
+            flayer_str = str(flayer).strip() if flayer else ""
+            records.append({
+                "id": int(num) if num else 0,
+                "identificacion": str(ident).strip() if ident else "",
+                "nombres": str(nombres).strip() if nombres else "",
+                "referencia": str(ref).strip() if ref else "",
+                "fecha": fecha_str,
+                "hora": hora_str,
+                "flayer": flayer_str,
+                "valor": int(valor) if isinstance(valor, (int, float)) else 0,
+                "archivo": fname,
+                "es_agregado": False,
+            })
+
+            # Extract aggregate summary from columns 12-15 if present and different from row's own flayer
+            if len(row) > 12:
+                agg_name = row[12]
+                if agg_name is not None and isinstance(agg_name, str):
+                    agg_name_stripped = agg_name.strip()
+                    agg_upper = agg_name_stripped.upper()
+                    skip_labels = {"TIPO FLAYER", "TOTAL", ""}
+                    if (agg_upper not in skip_labels
+                            and agg_upper != flayer_str.upper()
+                            and agg_name_stripped not in seen_aggregates):
+                        seen_aggregates.add(agg_name_stripped)
+                        agg_valor = row[13] if len(row) > 13 and isinstance(row[13], (int, float)) else 0
+                        agg_cantidad = row[14] if len(row) > 14 and isinstance(row[14], (int, float)) else 0
+                        agg_total = row[15] if len(row) > 15 and isinstance(row[15], (int, float)) else 0
+                        records.append({
+                            "id": 0,
+                            "identificacion": "",
+                            "nombres": "",
+                            "referencia": "",
+                            "fecha": "",
+                            "hora": "",
+                            "flayer": agg_name_stripped,
+                            "valor": int(agg_valor),
+                            "archivo": fname,
+                            "es_agregado": True,
+                            "cantidad": int(agg_cantidad),
+                            "total_cop": int(agg_total),
+                        })
+
+        wb.close()
+
+    _PAGOS_CACHE["data"] = records
+    _PAGOS_CACHE["mtime"] = latest_mtime
+    return records
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -215,6 +315,115 @@ async def get_anomalies():
                 })
 
     return {"anomalias": anomalias, "total": len(anomalias)}
+
+
+@app.get("/api/pagos/data")
+async def get_pagos_data():
+    records = _load_pagos_data()
+    return {"data": records, "total": len(records)}
+
+
+@app.get("/api/pagos/stats")
+async def get_pagos_stats():
+    records = _load_pagos_data()
+    total_cop = 0
+    total_trans = 0
+    ids_unicos = set()
+    ultima = ""
+
+    for r in records:
+        if r.get("es_agregado"):
+            total_cop += r["total_cop"]
+            total_trans += r["cantidad"]
+        else:
+            total_cop += r["valor"]
+            total_trans += 1
+            if r["identificacion"]:
+                ids_unicos.add(r["identificacion"])
+            if r["fecha"] and r["fecha"] > ultima:
+                ultima = r["fecha"]
+
+    total_personas = len(ids_unicos)
+
+    por_flayer = defaultdict(lambda: {"cantidad": 0, "total_cop": 0, "personas": set()})
+    for r in records:
+        f = r["flayer"] or "SIN ESPECIFICAR"
+        if r.get("es_agregado"):
+            por_flayer[f]["cantidad"] += r["cantidad"]
+            por_flayer[f]["total_cop"] += r["total_cop"]
+        else:
+            por_flayer[f]["cantidad"] += 1
+            por_flayer[f]["total_cop"] += r["valor"]
+        if r["identificacion"]:
+            por_flayer[f]["personas"].add(r["identificacion"])
+
+    flayer_list = []
+    for f, d in sorted(por_flayer.items(), key=lambda x: -x[1]["total_cop"]):
+        flayer_list.append({
+            "flayer": f,
+            "cantidad": d["cantidad"],
+            "total_cop": d["total_cop"],
+            "personas_unicas": len(d["personas"]),
+            "porcentaje_cop": round(d["total_cop"] / total_cop * 100, 1) if total_cop else 0,
+        })
+
+    por_dia = defaultdict(lambda: {"cantidad": 0, "total_cop": 0})
+    for r in records:
+        if r.get("es_agregado"):
+            continue
+        dia = r["fecha"][:10] if r["fecha"] else "SIN FECHA"
+        por_dia[dia]["cantidad"] += 1
+        por_dia[dia]["total_cop"] += r["valor"]
+
+    dia_list = [{"fecha": d, **v} for d, v in sorted(por_dia.items())]
+
+    return {
+        "total_cop": total_cop,
+        "total_transacciones": total_trans,
+        "total_personas_unicas": total_personas,
+        "ultima_transaccion": ultima,
+        "por_flayer": flayer_list,
+        "por_dia": dia_list,
+    }
+
+
+@app.get("/api/pagos/personas")
+async def get_pagos_personas():
+    records = _load_pagos_data()
+    personas = defaultdict(lambda: {
+        "nombres": "", "total_gastado": 0, "transacciones": 0,
+        "flyers": set(), "referencias": [], "primer_pago": "", "ultimo_pago": "",
+    })
+    for r in records:
+        ident = r["identificacion"]
+        if not ident:
+            continue
+        p = personas[ident]
+        if not p["nombres"]:
+            p["nombres"] = r["nombres"]
+        p["total_gastado"] += r["valor"]
+        p["transacciones"] += 1
+        p["flyers"].add(r["flayer"])
+        p["referencias"].append(r["referencia"])
+        if r["fecha"]:
+            if not p["primer_pago"] or r["fecha"] < p["primer_pago"]:
+                p["primer_pago"] = r["fecha"]
+            if not p["ultimo_pago"] or r["fecha"] > p["ultimo_pago"]:
+                p["ultimo_pago"] = r["fecha"]
+
+    persona_list = [
+        {
+            "identificacion": ident,
+            "nombres": d["nombres"],
+            "total_gastado": d["total_gastado"],
+            "transacciones": d["transacciones"],
+            "flyers": sorted(d["flyers"]),
+            "primer_pago": d["primer_pago"],
+            "ultimo_pago": d["ultimo_pago"],
+        }
+        for ident, d in sorted(personas.items(), key=lambda x: -x[1]["total_gastado"])
+    ]
+    return {"personas": persona_list, "total": len(persona_list)}
 
 
 @app.get("/api/download")

@@ -37,12 +37,7 @@ body {
   font-size: 28px;
 }
 
-.sidebar-header h1 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #212121;
-  letter-spacing: 0.3px;
-}
+
 
 .sidebar-nav {
   flex: 1;
@@ -560,4 +555,335 @@ body {
 .anomaly-user-icon {
   font-size: 16px !important;
   color: #FFC107;
+}
+
+/* ========== MODULE SELECTOR ========== */
+
+.sidebar-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.sidebar-header-text h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #212121;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.module-selector {
+  border: 1px solid #FFECB3;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #424242;
+  background: #FFFFFF;
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+}
+
+.module-selector:hover {
+  border-color: #FFC107;
+}
+
+.module-selector:focus {
+  border-color: #FFC107;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+}
+
+/* ========== PAGOS COMMON ========== */
+
+.section-subtitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #212121;
+  margin: 28px 0 16px;
+}
+
+.valor-cell {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== FLAYER BADGE / FILTER ========== */
+
+.flayer-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #FFF8E1;
+  color: #F57F17;
+  border: 1px solid #FFECB3;
+  white-space: nowrap;
+}
+
+.flayer-filter {
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #424242;
+  background: #FFFFFF;
+  cursor: pointer;
+  outline: none;
+  max-width: 240px;
+}
+
+.flayer-filter:hover {
+  border-color: #FFC107;
+}
+
+/* ========== FLAYER GRID (Resumen) ========== */
+
+.flayer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.flayer-card {
+  background: #FFF8E1;
+  border: 1px solid #FFECB3;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.flayer-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 15px;
+  color: #212121;
+}
+
+.flayer-card-icon {
+  font-size: 22px !important;
+  color: #FFC107;
+}
+
+.flayer-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flayer-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.flayer-stat-label {
+  color: #757575;
+}
+
+.flayer-stat-value {
+  font-weight: 600;
+  color: #212121;
+}
+
+/* ========== BAR TRACK (shared) ========== */
+
+.bar-track {
+  height: 8px;
+  background: #FFECB3;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: #FFC107;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* ========== FLAYER DETAIL (Por Flayer) ========== */
+
+.flayer-detail-card {
+  background: #FFFFFF;
+  border: 1px solid #F5F5F5;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.flayer-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.flayer-detail-icon {
+  font-size: 28px !important;
+  color: #FFC107;
+}
+
+.flayer-detail-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flayer-detail-info strong {
+  font-size: 16px;
+  color: #212121;
+}
+
+.flayer-detail-meta {
+  font-size: 13px;
+  color: #757575;
+}
+
+.flayer-detail-pct {
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFC107;
+}
+
+/* ========== BAR CHART (Estadisticas) ========== */
+
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bar-label {
+  font-size: 13px;
+  color: #424242;
+  width: 160px;
+  flex-shrink: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-label-date {
+  font-size: 12px;
+  width: 120px;
+}
+
+.bar-item .bar-track {
+  flex: 1;
+  height: 24px;
+}
+
+.bar-item .bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  min-width: 2px;
+}
+
+.bar-fill-cop {
+  background: #FFC107;
+}
+
+.bar-fill-people {
+  background: #FFB300;
+}
+
+.bar-fill-dia {
+  background: #FFA000;
+}
+
+.bar-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #212121;
+  width: 140px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== DIA LIST (Resumen) ========== */
+
+.dia-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dia-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #FFF8E1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.dia-fecha {
+  width: 140px;
+  font-weight: 500;
+  color: #212121;
+}
+
+.dia-cant {
+  color: #757575;
+  flex: 1;
+}
+
+.dia-valor {
+  font-weight: 600;
+  color: #212121;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== AGGREGATE ENTRY STYLES ========== */
+
+.aggregate-row td {
+  background: #FFF3E0;
+  font-style: italic;
+  color: #E65100;
+}
+
+.aggregate-row:hover td {
+  background: #FFE0B2 !important;
+}
+
+.flayer-badge.agregado-badge {
+  background: #FFF3E0;
+  color: #E65100;
+  border-color: #FFCC80;
+  font-style: italic;
+}
+
+.aggregate-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #FFF3E0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #E65100;
+  border: 1px solid #FFCC80;
+}
+
+.aggregate-info-icon {
+  font-size: 18px !important;
+  color: #EF6C00;
 }

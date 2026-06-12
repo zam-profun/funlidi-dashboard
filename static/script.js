@@ -1,11 +1,14 @@
 let allData = [];
 let refreshInterval = null;
 let lastRefreshTime = null;
+let currentModule = "bot";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
+  initModuleSelector();
   initRefresh();
   initSearch();
+  initPagosSearch();
   initDownload();
   initTimezone();
 
@@ -14,17 +17,40 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function initNavigation() {
-  const navBtns = document.querySelectorAll(".nav-btn");
-  navBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      navBtns.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      const section = btn.dataset.section;
-      switchSection(section);
-      loadSection(section);
+  document.querySelectorAll(".sidebar-nav").forEach((nav) => {
+    nav.querySelectorAll(".nav-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        nav.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const section = btn.dataset.section;
+        switchSection(section);
+        loadSection(section);
+      });
     });
   });
+}
+
+function initModuleSelector() {
+  document.getElementById("moduleSelector").addEventListener("change", (e) => {
+    switchModule(e.target.value);
+  });
+}
+
+function switchModule(module) {
+  currentModule = module;
+  document.getElementById("nav-bot").style.display = module === "bot" ? "" : "none";
+  document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
+  document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
+
+  const activeNav = document.getElementById("nav-" + module);
+  const firstBtn = activeNav.querySelector(".nav-btn");
+  if (firstBtn) {
+    activeNav.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+    firstBtn.classList.add("active");
+    const section = firstBtn.dataset.section;
+    switchSection(section);
+    loadSection(section);
+  }
 }
 
 function switchSection(section) {
@@ -37,6 +63,11 @@ function switchSection(section) {
     estadisticas: "Estadisticas",
     anomalias: "Anomalias",
     descargar: "Descargar",
+    "pagos-resumen": "Resumen de Pagos",
+    "pagos-registros": "Registros de Pagos",
+    "pagos-flayer": "Por Flayer",
+    "pagos-personas": "Personas",
+    "pagos-estadisticas": "Estadisticas de Pagos",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -45,6 +76,11 @@ function loadSection(section) {
   if (section === "registros") loadTable();
   if (section === "estadisticas") { loadStats(); loadActivity(); }
   if (section === "anomalias") loadAnomalies();
+  if (section === "pagos-resumen") loadPagosResumen();
+  if (section === "pagos-registros") loadPagosRegistros();
+  if (section === "pagos-flayer") loadPagosFlayer();
+  if (section === "pagos-personas") loadPagosPersonas();
+  if (section === "pagos-estadisticas") loadPagosStats();
 }
 
 function startAutoRefresh() {
@@ -393,6 +429,311 @@ function formatDateStrict(dateStr) {
     return d.toLocaleDateString("es-CO", opts);
   } catch {
     return dateStr;
+  }
+}
+
+// ========== PAGOS FUNCTIONS ==========
+
+let pagosAllData = [];
+let pagosFilteredData = [];
+let pagosPersonasAll = [];
+
+function initPagosSearch() {
+  document.getElementById("pagosSearchInput").addEventListener("input", () => {
+    renderPagosTable();
+  });
+  document.getElementById("pagosFlayerFilter").addEventListener("change", () => {
+    renderPagosTable();
+  });
+  document.getElementById("pagosPersonasSearch").addEventListener("input", () => {
+    renderPagosPersonas();
+  });
+  document.getElementById("pagosPersonasFlayer").addEventListener("change", () => {
+    renderPagosPersonas();
+  });
+}
+
+function formatCOP(val) {
+  return "$" + Number(val).toLocaleString("es-CO");
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+async function loadPagosResumen() {
+  const el = document.getElementById("pagosResumenContent");
+  try {
+    const resp = await fetch("/api/pagos/stats");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    const d = json;
+
+    let html = '<div class="stats-grid">';
+    html += '<div class="stat-card"><span class="material-icons stat-icon">payments</span><div class="stat-info"><span class="stat-value">' + formatCOP(d.total_cop) + '</span><span class="stat-label">Total recaudado</span></div></div>';
+    html += '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total_personas_unicas + '</span><span class="stat-label">Personas unicas</span></div></div>';
+    html += '<div class="stat-card"><span class="material-icons stat-icon">receipt_long</span><div class="stat-info"><span class="stat-value">' + d.total_transacciones + '</span><span class="stat-label">Transacciones</span></div></div>';
+    html += '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value stat-date">' + formatDateShort(d.ultima_transaccion) + '</span><span class="stat-label">Ultima transaccion</span></div></div>';
+    html += '</div>';
+
+    html += '<h3 class="section-subtitle">Desglose por Flayer</h3>';
+    html += '<div class="flayer-grid">';
+    for (const f of d.por_flayer) {
+      html += '<div class="flayer-card">';
+      html += '<div class="flayer-card-header">';
+      html += '<span class="material-icons flayer-card-icon">category</span>';
+      html += '<strong>' + f.flayer + '</strong>';
+      html += '</div>';
+      html += '<div class="flayer-card-body">';
+      html += '<div class="flayer-stat"><span class="flayer-stat-label">Total COP</span><span class="flayer-stat-value">' + formatCOP(f.total_cop) + '</span></div>';
+      html += '<div class="flayer-stat"><span class="flayer-stat-label">Cantidad</span><span class="flayer-stat-value">' + f.cantidad + '</span></div>';
+      html += '<div class="flayer-stat"><span class="flayer-stat-label">Personas</span><span class="flayer-stat-value">' + f.personas_unicas + '</span></div>';
+      html += '<div class="flayer-stat"><span class="flayer-stat-label">Porcentaje</span><span class="flayer-stat-value">' + f.porcentaje_cop + '%</span></div>';
+      html += '<div class="bar-track"><div class="bar-fill" style="width:' + f.porcentaje_cop + '%"></div></div>';
+      html += '</div></div>';
+    }
+    html += '</div>';
+
+    html += '<h3 class="section-subtitle">Transacciones por Dia</h3>';
+    html += '<div class="dia-list">';
+    for (const d of d.por_dia) {
+      html += '<div class="dia-item"><span class="dia-fecha">' + formatDateShort(d.fecha) + '</span><span class="dia-cant">' + d.cantidad + ' trans.</span><span class="dia-valor">' + formatCOP(d.total_cop) + '</span></div>';
+    }
+    html += '</div>';
+
+    el.innerHTML = html;
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar resumen de pagos.</p></div>';
+  }
+}
+
+async function loadPagosRegistros() {
+  const tbody = document.getElementById("pagosTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando registros de pagos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/pagos/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    pagosAllData = json.data || [];
+
+    const flayerSet = new Set();
+    for (const r of pagosAllData) {
+      if (r.flayer) flayerSet.add(r.flayer);
+    }
+    const sel = document.getElementById("pagosFlayerFilter");
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">Todos los flayers</option>';
+    for (const f of [...flayerSet].sort()) {
+      sel.innerHTML += '<option value="' + f.replace(/"/g, "&quot;") + '">' + f + '</option>';
+    }
+    sel.value = currentVal;
+
+    renderPagosTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar registros de pagos.</p></div></td></tr>';
+  }
+}
+
+function renderPagosTable() {
+  const tbody = document.getElementById("pagosTableBody");
+  const search = document.getElementById("pagosSearchInput").value.toLowerCase();
+  const flayerFilter = document.getElementById("pagosFlayerFilter").value;
+
+  let filtered = pagosAllData;
+  if (search) {
+    filtered = filtered.filter(function(r) {
+      return (r.nombres && r.nombres.toLowerCase().includes(search)) ||
+             (r.identificacion && r.identificacion.toLowerCase().includes(search)) ||
+             (r.referencia && r.referencia.toLowerCase().includes(search));
+    });
+  }
+  if (flayerFilter) {
+    filtered = filtered.filter(function(r) { return r.flayer === flayerFilter; });
+  }
+
+  document.getElementById("pagosTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + (search ? "No se encontraron registros con ese filtro." : "No hay registros de pago.") + '</p></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(r) {
+    var isAgg = r.es_agregado;
+    var rowClass = isAgg ? ' class="aggregate-row"' : "";
+    var nombreDisplay = r.nombres || "-";
+    if (isAgg && r.cantidad) {
+      nombreDisplay = r.cantidad + " personas";
+    }
+    var valorDisplay = isAgg ? formatCOP(r.total_cop) : formatCOP(r.valor);
+    var badgeExtra = isAgg ? ' agregado-badge' : '';
+    var badgeText = isAgg ? 'Agregado' : (r.flayer || "-");
+    return '<tr' + rowClass + '><td>' + (r.identificacion || "-") + '</td><td>' + nombreDisplay + '</td><td>' + (r.referencia || "-") + '</td><td>' + formatDateShort(r.fecha) + '</td><td>' + (r.hora || "-") + '</td><td><span class="flayer-badge' + badgeExtra + '">' + badgeText + '</span></td><td class="valor-cell">' + valorDisplay + '</td></tr>';
+  }).join("");
+}
+
+async function loadPagosFlayer() {
+  const el = document.getElementById("pagosFlayerContent");
+  try {
+    const resp = await fetch("/api/pagos/stats");
+    if (!resp.ok) throw new Error("Error");
+    const statsJson = await resp.json();
+
+    const dataResp = await fetch("/api/pagos/data");
+    if (!dataResp.ok) throw new Error("Error");
+    const dataJson = await dataResp.json();
+    const records = dataJson.data || [];
+
+    const grouped = {};
+    for (const r of records) {
+      const f = r.flayer || "SIN ESPECIFICAR";
+      if (!grouped[f]) grouped[f] = [];
+      grouped[f].push(r);
+    }
+
+    let html = "";
+    const flayers = statsJson.por_flayer || [];
+    for (const f of flayers) {
+      const items = grouped[f.flayer] || [];
+      // Split into individual and aggregate
+      var individual = items.filter(function(i) { return !i.es_agregado; });
+      var aggregates = items.filter(function(i) { return i.es_agregado; });
+      html += '<div class="flayer-detail-card">';
+      html += '<div class="flayer-detail-header">';
+      html += '<span class="material-icons flayer-detail-icon">category</span>';
+      html += '<div class="flayer-detail-info">';
+      html += '<strong>' + f.flayer + '</strong>';
+      html += '<span class="flayer-detail-meta">' + f.cantidad + ' transacciones | ' + formatCOP(f.total_cop) + ' | ' + f.personas_unicas + ' personas</span>';
+      html += '</div>';
+      html += '<span class="flayer-detail-pct">' + f.porcentaje_cop + '%</span>';
+      html += '</div>';
+      if (individual.length > 0) {
+        html += '<div class="table-wrapper" style="margin-top:12px"><table class="data-table"><thead><tr><th>ID</th><th>Nombre</th><th>Referencia</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>';
+        for (const item of individual) {
+          html += '<tr><td>' + (item.identificacion || "-") + '</td><td>' + (item.nombres || "-") + '</td><td>' + (item.referencia || "-") + '</td><td>' + formatDateShort(item.fecha) + '</td><td class="valor-cell">' + formatCOP(item.valor) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      for (const agg of aggregates) {
+        html += '<div class="aggregate-info"><span class="material-icons aggregate-info-icon">grid_on</span><span>' + agg.cantidad + ' transacciones agrupadas por un total de ' + formatCOP(agg.total_cop) + '</span></div>';
+      }
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos por flayer.</p></div>';
+  }
+}
+
+async function loadPagosPersonas() {
+  const tbody = document.getElementById("pagosPersonasBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando personas...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/pagos/personas");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    pagosPersonasAll = json.personas || [];
+
+    const flayerSet = new Set();
+    for (const p of pagosPersonasAll) {
+      for (const f of p.flyers) flayerSet.add(f);
+    }
+    const sel = document.getElementById("pagosPersonasFlayer");
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">Todos los flayers</option>';
+    for (const f of [...flayerSet].sort()) {
+      sel.innerHTML += '<option value="' + f.replace(/"/g, "&quot;") + '">' + f + '</option>';
+    }
+    sel.value = currentVal;
+
+    renderPagosPersonas();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar personas.</p></div></td></tr>';
+  }
+}
+
+function renderPagosPersonas() {
+  const tbody = document.getElementById("pagosPersonasBody");
+  const search = document.getElementById("pagosPersonasSearch").value.toLowerCase();
+  const flayerFilter = document.getElementById("pagosPersonasFlayer").value;
+
+  let filtered = pagosPersonasAll;
+  if (search) {
+    filtered = filtered.filter(function(p) {
+      return (p.nombres && p.nombres.toLowerCase().includes(search)) ||
+             (p.identificacion && p.identificacion.toLowerCase().includes(search));
+    });
+  }
+  if (flayerFilter) {
+    filtered = filtered.filter(function(p) {
+      return p.flyers && p.flyers.indexOf(flayerFilter) !== -1;
+    });
+  }
+
+  document.getElementById("pagosPersonasCount").textContent = filtered.length + " persona" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + (search ? "No se encontraron personas con ese filtro." : "No hay personas registradas.") + '</p></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(p) {
+    return '<tr><td>' + (p.identificacion || "-") + '</td><td>' + (p.nombres || "-") + '</td><td class="valor-cell">' + formatCOP(p.total_gastado) + '</td><td>' + p.transacciones + '</td><td>' + p.flyers.map(function(f) { return '<span class="flayer-badge">' + f + '</span>'; }).join(" ") + '</td><td>' + formatDateShort(p.ultimo_pago) + '</td></tr>';
+  }).join("");
+}
+
+async function loadPagosStats() {
+  const el = document.getElementById("pagosStatsContent");
+  try {
+    const resp = await fetch("/api/pagos/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+
+    let html = '<h3 class="section-subtitle">COP por Flayer</h3>';
+    html += '<div class="bar-chart">';
+    const maxCop = d.por_flayer.length > 0 ? d.por_flayer[0].total_cop : 1;
+    for (const f of d.por_flayer) {
+      const pct = Math.round(f.total_cop / maxCop * 100);
+      html += '<div class="bar-item"><span class="bar-label">' + f.flayer + '</span><div class="bar-track"><div class="bar-fill bar-fill-cop" style="width:' + pct + '%"></div></div><span class="bar-value">' + formatCOP(f.total_cop) + '</span></div>';
+    }
+    html += '</div>';
+
+    html += '<h3 class="section-subtitle" style="margin-top:32px">Personas por Flayer</h3>';
+    html += '<div class="bar-chart">';
+    const maxPeople = d.por_flayer.length > 0 ? d.por_flayer[0].personas_unicas : 1;
+    for (const f of d.por_flayer) {
+      const pct = Math.round(f.personas_unicas / maxPeople * 100);
+      html += '<div class="bar-item"><span class="bar-label">' + f.flayer + '</span><div class="bar-track"><div class="bar-fill bar-fill-people" style="width:' + pct + '%"></div></div><span class="bar-value">' + f.personas_unicas + ' pers.</span></div>';
+    }
+    html += '</div>';
+
+    html += '<h3 class="section-subtitle" style="margin-top:32px">Transacciones por Dia</h3>';
+    html += '<div class="bar-chart">';
+    const maxDia = d.por_dia.length > 0 ? Math.max.apply(Math, d.por_dia.map(function(x) { return x.cantidad; })) : 1;
+    for (const dia of d.por_dia) {
+      const pct = Math.round(dia.cantidad / maxDia * 100);
+      html += '<div class="bar-item"><span class="bar-label bar-label-date">' + formatDateShort(dia.fecha) + '</span><div class="bar-track"><div class="bar-fill bar-fill-dia" style="width:' + pct + '%"></div></div><span class="bar-value">' + dia.cantidad + ' (' + formatCOP(dia.total_cop) + ')</span></div>';
+    }
+    html += '</div>';
+
+    el.innerHTML = html;
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas de pagos.</p></div>';
   }
 }
 
