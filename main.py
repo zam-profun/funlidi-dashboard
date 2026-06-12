@@ -15,6 +15,8 @@ load_dotenv()
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
+COL_TZ = timezone(timedelta(hours=-5))
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
@@ -47,9 +49,9 @@ async def get_stats():
         (r.get("updated_at") or r.get("created_at") or "") for r in rows
     ) if rows else None
 
-    ahora = datetime.now(timezone.utc)
-    hoy_inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    semana_inicio = hoy_inicio - timedelta(days=7)
+    ahora_col = datetime.now(COL_TZ)
+    hoy_inicio_col = ahora_col.replace(hour=0, minute=0, second=0, microsecond=0)
+    semana_inicio_col = hoy_inicio_col - timedelta(days=7)
 
     registros_hoy = 0
     actualizaciones_hoy = 0
@@ -61,30 +63,30 @@ async def get_stats():
         actualizado = r.get("updated_at")
         if creado:
             try:
-                c = datetime.fromisoformat(creado.replace("Z", "+00:00"))
-                if c >= hoy_inicio:
+                c = datetime.fromisoformat(creado.replace("Z", "+00:00")).astimezone(COL_TZ)
+                if c >= hoy_inicio_col:
                     registros_hoy += 1
-                if c >= semana_inicio:
+                if c >= semana_inicio_col:
                     registros_semana += 1
             except Exception:
                 pass
         if actualizado:
             try:
-                a = datetime.fromisoformat(actualizado.replace("Z", "+00:00"))
-                if a >= hoy_inicio:
+                a = datetime.fromisoformat(actualizado.replace("Z", "+00:00")).astimezone(COL_TZ)
+                if a >= hoy_inicio_col:
                     if creado:
                         try:
-                            c = datetime.fromisoformat(creado.replace("Z", "+00:00"))
+                            c = datetime.fromisoformat(creado.replace("Z", "+00:00")).astimezone(COL_TZ)
                             if abs((a - c).total_seconds()) > 5:
                                 actualizaciones_hoy += 1
                         except Exception:
                             actualizaciones_hoy += 1
                     else:
                         actualizaciones_hoy += 1
-                if a >= semana_inicio:
+                if a >= semana_inicio_col:
                     if creado:
                         try:
-                            c = datetime.fromisoformat(creado.replace("Z", "+00:00"))
+                            c = datetime.fromisoformat(creado.replace("Z", "+00:00")).astimezone(COL_TZ)
                             if abs((a - c).total_seconds()) > 5:
                                 actualizaciones_semana += 1
                         except Exception:
@@ -123,16 +125,7 @@ async def get_activity():
                     tipo = "Informacion actualizada"
             except Exception:
                 pass
-        cuando = actualizado or creado
-        ts = ""
-        if cuando:
-            try:
-                d = datetime.fromisoformat(cuando.replace("Z", "+00:00"))
-                meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                          "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-                ts = f"{d.day} de {meses[d.month - 1]} a las {d.hour}:{d.minute:02d}"
-            except Exception:
-                ts = str(cuando)
+        timestamp = actualizado or creado
         usuario = r.get("telegram_username")
         if usuario:
             usuario = "@" + usuario
@@ -143,7 +136,7 @@ async def get_activity():
             "usuario": usuario,
             "nombre": nombre,
             "tipo": tipo,
-            "cuando": ts,
+            "timestamp": timestamp,
         })
     return {"actividades": actividades}
 
@@ -244,7 +237,7 @@ async def download_xlsx():
         if not valor:
             return "-"
         try:
-            d = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+            d = datetime.fromisoformat(valor.replace("Z", "+00:00")).astimezone(COL_TZ)
             meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
                       "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
             return f"{d.day} de {meses[d.month - 1]} de {d.year} a las {d.hour}:{d.minute:02d}"
@@ -288,7 +281,7 @@ async def download_xlsx():
     wb.save(output)
     output.seek(0)
 
-    hoy = datetime.now()
+    hoy = datetime.now(COL_TZ)
     filename = f"Registros_FUNLIDI_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
     return StreamingResponse(
         output,

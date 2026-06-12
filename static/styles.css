@@ -119,6 +119,49 @@ body {
   white-space: nowrap;
 }
 
+.tz-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tz-icon {
+  font-size: 16px !important;
+  color: #9E9E9E;
+}
+
+.tz-select {
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #424242;
+  background: #FFFFFF;
+  cursor: pointer;
+  outline: none;
+}
+
+.tz-select:hover {
+  border-color: #FFC107;
+}
+
+.tz-select:focus {
+  border-color: #FFC107;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+}
+
+.tz-local-label {
+  font-size: 12px;
+  color: #9E9E9E;
+  white-space: nowrap;
+}
+
+.tz-local-label:hover {
+  color: #FFC107;
+  text-decoration: underline;
+}
+
 .section-title {
   font-size: 24px;
   font-weight: 600;

@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRefresh();
   initSearch();
   initDownload();
+  initTimezone();
 
   loadSection("registros");
   startAutoRefresh();
@@ -83,6 +84,37 @@ function tickRefreshIndicator() {
     const mins = Math.floor(seconds / 60);
     el.textContent = `Actualizado hace ${mins} minuto${mins > 1 ? "s" : ""}`;
   }
+}
+
+function initTimezone() {
+  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const label = document.getElementById("tzLocalLabel");
+  if (localTz && localTz !== "America/Bogota") {
+    label.textContent = `o ver en ${localTz}`;
+    label.style.cursor = "pointer";
+    label.addEventListener("click", () => {
+      document.getElementById("tzSelector").value = "local";
+      onTimezoneChange();
+    });
+  }
+
+  const saved = localStorage.getItem("funlidi_tz");
+  if (saved) {
+    document.getElementById("tzSelector").value = saved;
+  }
+
+  document.getElementById("tzSelector").addEventListener("change", onTimezoneChange);
+}
+
+function onTimezoneChange() {
+  const val = document.getElementById("tzSelector").value;
+  localStorage.setItem("funlidi_tz", val);
+  const active = document.querySelector(".nav-btn.active");
+  if (active) loadSection(active.dataset.section);
+}
+
+function getSelectedTimezone() {
+  return document.getElementById("tzSelector").value;
 }
 
 function initSearch() {
@@ -249,7 +281,7 @@ async function loadActivity() {
         <td>${a.nombre}</td>
         <td>${a.usuario}</td>
         <td><span class="tipo-badge ${tipoClass}">${a.tipo}</span></td>
-        <td>${a.cuando}</td>
+        <td>${formatDate(a.timestamp)}</td>
       </tr>`;
       })
       .join("");
@@ -329,13 +361,16 @@ function formatDate(dateStr) {
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString("es-ES", {
+    const tz = getSelectedTimezone();
+    const opts = {
       day: "numeric",
       month: "long",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    });
+    };
+    if (tz !== "local") opts.timeZone = tz;
+    return d.toLocaleDateString("es-CO", opts);
   } catch {
     return dateStr;
   }
@@ -346,14 +381,16 @@ function formatDateStrict(dateStr) {
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const opciones = {
+    const tz = getSelectedTimezone();
+    const opts = {
       day: "numeric",
       month: "long",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
     };
-    return d.toLocaleDateString("es-ES", opciones);
+    if (tz !== "local") opts.timeZone = tz;
+    return d.toLocaleDateString("es-CO", opts);
   } catch {
     return dateStr;
   }
