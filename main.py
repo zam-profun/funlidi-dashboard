@@ -45,7 +45,6 @@ def _load_pagos_data():
         return _PAGOS_CACHE["data"]
 
     records = []
-    seen_aggregates = set()
     for fname in PAGOS_FILES:
         fpath = os.path.join(DATA_DIR, fname)
         if not os.path.exists(fpath):
@@ -53,7 +52,7 @@ def _load_pagos_data():
         wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
         ws = wb[wb.sheetnames[0]]
         for row in ws.iter_rows(min_row=3, values_only=True):
-            if row[0] is None:
+            if row[0] is None and row[1] is None:
                 break
             num, ident, nombres, ref, fecha, hora, flayer, valor = row[0:8]
             fecha_str = ""
@@ -68,7 +67,6 @@ def _load_pagos_data():
                     hora_str = hora.strftime("%H:%M") if hasattr(hora, "strftime") else str(hora)
                 except Exception:
                     hora_str = str(hora)
-            flayer_str = str(flayer).strip() if flayer else ""
             records.append({
                 "id": int(num) if num else 0,
                 "identificacion": str(ident).strip() if ident else "",
@@ -76,41 +74,10 @@ def _load_pagos_data():
                 "referencia": str(ref).strip() if ref else "",
                 "fecha": fecha_str,
                 "hora": hora_str,
-                "flayer": flayer_str,
+                "flayer": str(flayer).strip() if flayer else "",
                 "valor": int(valor) if isinstance(valor, (int, float)) else 0,
                 "archivo": fname,
-                "es_agregado": False,
             })
-
-            # Extract aggregate summary from columns 12-15 if present and different from row's own flayer
-            if len(row) > 12:
-                agg_name = row[12]
-                if agg_name is not None and isinstance(agg_name, str):
-                    agg_name_stripped = agg_name.strip()
-                    agg_upper = agg_name_stripped.upper()
-                    skip_labels = {"TIPO FLAYER", "TOTAL", ""}
-                    if (agg_upper not in skip_labels
-                            and agg_upper != flayer_str.upper()
-                            and agg_name_stripped not in seen_aggregates):
-                        seen_aggregates.add(agg_name_stripped)
-                        agg_valor = row[13] if len(row) > 13 and isinstance(row[13], (int, float)) else 0
-                        agg_cantidad = row[14] if len(row) > 14 and isinstance(row[14], (int, float)) else 0
-                        agg_total = row[15] if len(row) > 15 and isinstance(row[15], (int, float)) else 0
-                        records.append({
-                            "id": 0,
-                            "identificacion": "",
-                            "nombres": "",
-                            "referencia": "",
-                            "fecha": "",
-                            "hora": "",
-                            "flayer": agg_name_stripped,
-                            "valor": int(agg_valor),
-                            "archivo": fname,
-                            "es_agregado": True,
-                            "cantidad": int(agg_cantidad),
-                            "total_cop": int(agg_total),
-                        })
-
         wb.close()
 
     _PAGOS_CACHE["data"] = records
@@ -326,34 +293,21 @@ async def get_pagos_data():
 @app.get("/api/pagos/stats")
 async def get_pagos_stats():
     records = _load_pagos_data()
-    total_cop = 0
-    total_trans = 0
-    ids_unicos = set()
-    ultima = ""
-
-    for r in records:
-        if r.get("es_agregado"):
-            total_cop += r["total_cop"]
-            total_trans += r["cantidad"]
-        else:
-            total_cop += r["valor"]
-            total_trans += 1
-            if r["identificacion"]:
-                ids_unicos.add(r["identificacion"])
-            if r["fecha"] and r["fecha"] > ultima:
-                ultima = r["fecha"]
-
+    total_cop = sum(r["valor"] for r in records)
+    total_trans = len(records)
+    ids_unicos = set(r["identificacion"] for r in records if r["identificacion"])
     total_personas = len(ids_unicos)
+
+    ultima = ""
+    for r in records:
+        if r["fecha"] and r["fecha"] > ultima:
+            ultima = r["fecha"]
 
     por_flayer = defaultdict(lambda: {"cantidad": 0, "total_cop": 0, "personas": set()})
     for r in records:
         f = r["flayer"] or "SIN ESPECIFICAR"
-        if r.get("es_agregado"):
-            por_flayer[f]["cantidad"] += r["cantidad"]
-            por_flayer[f]["total_cop"] += r["total_cop"]
-        else:
-            por_flayer[f]["cantidad"] += 1
-            por_flayer[f]["total_cop"] += r["valor"]
+        por_flayer[f]["cantidad"] += 1
+        por_flayer[f]["total_cop"] += r["valor"]
         if r["identificacion"]:
             por_flayer[f]["personas"].add(r["identificacion"])
 
@@ -369,9 +323,9 @@ async def get_pagos_stats():
 
     por_dia = defaultdict(lambda: {"cantidad": 0, "total_cop": 0})
     for r in records:
-        if r.get("es_agregado"):
+        if not r["fecha"]:
             continue
-        dia = r["fecha"][:10] if r["fecha"] else "SIN FECHA"
+        dia = r["fecha"][:10]
         por_dia[dia]["cantidad"] += 1
         por_dia[dia]["total_cop"] += r["valor"]
 

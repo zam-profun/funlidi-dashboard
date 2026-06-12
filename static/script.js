@@ -569,16 +569,7 @@ function renderPagosTable() {
   }
 
   tbody.innerHTML = filtered.map(function(r) {
-    var isAgg = r.es_agregado;
-    var rowClass = isAgg ? ' class="aggregate-row"' : "";
-    var nombreDisplay = r.nombres || "-";
-    if (isAgg && r.cantidad) {
-      nombreDisplay = r.cantidad + " personas";
-    }
-    var valorDisplay = isAgg ? formatCOP(r.total_cop) : formatCOP(r.valor);
-    var badgeExtra = isAgg ? ' agregado-badge' : '';
-    var badgeText = isAgg ? 'Agregado' : (r.flayer || "-");
-    return '<tr' + rowClass + '><td>' + (r.identificacion || "-") + '</td><td>' + nombreDisplay + '</td><td>' + (r.referencia || "-") + '</td><td>' + formatDateShort(r.fecha) + '</td><td>' + (r.hora || "-") + '</td><td><span class="flayer-badge' + badgeExtra + '">' + badgeText + '</span></td><td class="valor-cell">' + valorDisplay + '</td></tr>';
+    return '<tr><td>' + (r.identificacion || "-") + '</td><td>' + (r.nombres || "-") + '</td><td>' + (r.referencia || "-") + '</td><td>' + formatDateShort(r.fecha) + '</td><td>' + (r.hora || "-") + '</td><td><span class="flayer-badge">' + (r.flayer || "-") + '</span></td><td class="valor-cell">' + formatCOP(r.valor) + '</td></tr>';
   }).join("");
 }
 
@@ -605,9 +596,6 @@ async function loadPagosFlayer() {
     const flayers = statsJson.por_flayer || [];
     for (const f of flayers) {
       const items = grouped[f.flayer] || [];
-      // Split into individual and aggregate
-      var individual = items.filter(function(i) { return !i.es_agregado; });
-      var aggregates = items.filter(function(i) { return i.es_agregado; });
       html += '<div class="flayer-detail-card">';
       html += '<div class="flayer-detail-header">';
       html += '<span class="material-icons flayer-detail-icon">category</span>';
@@ -617,17 +605,11 @@ async function loadPagosFlayer() {
       html += '</div>';
       html += '<span class="flayer-detail-pct">' + f.porcentaje_cop + '%</span>';
       html += '</div>';
-      if (individual.length > 0) {
-        html += '<div class="table-wrapper" style="margin-top:12px"><table class="data-table"><thead><tr><th>ID</th><th>Nombre</th><th>Referencia</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>';
-        for (const item of individual) {
-          html += '<tr><td>' + (item.identificacion || "-") + '</td><td>' + (item.nombres || "-") + '</td><td>' + (item.referencia || "-") + '</td><td>' + formatDateShort(item.fecha) + '</td><td class="valor-cell">' + formatCOP(item.valor) + '</td></tr>';
-        }
-        html += '</tbody></table></div>';
+      html += '<div class="table-wrapper" style="margin-top:12px"><table class="data-table"><thead><tr><th>ID</th><th>Nombre</th><th>Referencia</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>';
+      for (const item of items) {
+        html += '<tr><td>' + (item.identificacion || "-") + '</td><td>' + (item.nombres || "-") + '</td><td>' + (item.referencia || "-") + '</td><td>' + formatDateShort(item.fecha) + '</td><td class="valor-cell">' + formatCOP(item.valor) + '</td></tr>';
       }
-      for (const agg of aggregates) {
-        html += '<div class="aggregate-info"><span class="material-icons aggregate-info-icon">grid_on</span><span>' + agg.cantidad + ' transacciones agrupadas por un total de ' + formatCOP(agg.total_cop) + '</span></div>';
-      }
-      html += '</div>';
+      html += '</tbody></table></div></div>';
     }
 
     el.innerHTML = html;
