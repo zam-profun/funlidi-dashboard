@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard FUNLIDI</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="material-icons sidebar-logo">assignment</span>
+      <h1>FUNLIDI</h1>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-section="registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="anomalias">
+        <span class="material-icons">warning</span>
+        <span>Anomalias</span>
+      </button>
+      <button class="nav-btn" data-section="descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="sidebar-version">v1.0</span>
+    </div>
+  </aside>
+
+  <main class="main-content" id="mainContent">
+    <header class="content-header">
+      <h2 class="section-title" id="sectionTitle">Registros</h2>
+      <button class="btn btn-refresh" id="btnRefresh" title="Actualizar datos">
+        <span class="material-icons">refresh</span>
+        Actualizar
+      </button>
+      <span class="refresh-indicator" id="refreshIndicator"></span>
+    </header>
+
+    <section class="content-section active" id="section-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Aqui aparecen todas las personas que han usado el bot de FUNLIDI. Cada fila representa a una persona y los datos que ha registrado. Puedes buscar por nombre, correo o documento usando el buscador.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="searchInput" placeholder="Buscar por nombre, correo o documento..." class="search-input">
+        </div>
+        <span class="table-count" id="tableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="dataTable">
+          <thead>
+            <tr>
+              <th>Usuario de Telegram</th>
+              <th>Nombres Completos</th>
+              <th>Correo Electronico</th>
+              <th>Numero de Documento</th>
+              <th>Estado</th>
+              <th>Ultima Actualizacion</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr class="empty-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-estadisticas">
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <span class="material-icons stat-icon">people</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statTotal">0</span>
+            <span class="stat-label">Total de registros</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">check_circle</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statCompletados">0</span>
+            <span class="stat-label">Completados</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">warning</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statIncompletos">0</span>
+            <span class="stat-label">Incompletos</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">schedule</span>
+          <div class="stat-info">
+            <span class="stat-value stat-date" id="statUltima">-</span>
+            <span class="stat-label">Ultima actualizacion</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">today</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statRegistrosHoy">0</span>
+            <span class="stat-label">Registros de hoy</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">edit_note</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statActualizacionesHoy">0</span>
+            <span class="stat-label">Actualizaciones de hoy</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">date_range</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statRegistrosSemana">0</span>
+            <span class="stat-label">Registros esta semana</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-icons stat-icon">update</span>
+          <div class="stat-info">
+            <span class="stat-value" id="statActualizacionesSemana">0</span>
+            <span class="stat-label">Actualizaciones esta semana</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="activity-section">
+        <h3 class="activity-title">Actividad Reciente</h3>
+        <p class="activity-desc">Ultimas personas que registraron o actualizaron su informacion.</p>
+        <div class="table-wrapper">
+          <table class="data-table activity-table" id="activityTable">
+            <thead>
+              <tr>
+                <th>Persona</th>
+                <th>Usuario</th>
+                <th>Tipo</th>
+                <th>Cuando</th>
+              </tr>
+            </thead>
+            <tbody id="activityBody">
+              <tr class="empty-row">
+                <td colspan="4">
+                  <div class="empty-state">
+                    <span class="material-icons empty-icon">inbox</span>
+                    <p>Cargando actividad...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-anomalias">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Esta seccion detecta posibles casos donde diferentes personas podrian estar compartiendo la misma informacion. Se revisan documentos duplicados, correos repetidos y nombres con alta similitud.</p>
+      </div>
+      <div id="anomaliasContainer">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">check_circle</span>
+          <p>Cargando anomalias...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargara un archivo de Excel con todos los datos registrados por el bot de FUNLIDI. El archivo incluye el usuario de Telegram, nombres completos, correo electronico, numero de documento y las fechas de registro.</p>
+        <button class="btn btn-download" id="btnDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="downloadInfo"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
