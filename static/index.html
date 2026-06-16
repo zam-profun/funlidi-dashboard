@@ -16,6 +16,7 @@
         <select id="moduleSelector" class="module-selector">
           <option value="bot">FUNLIDI - BOT</option>
           <option value="pagos">FUNLIDI - PAGOS</option>
+          <option value="ayudas">BOT - AYUDAS H.</option>
         </select>
       </div>
     </div>
@@ -57,6 +58,20 @@
       <button class="nav-btn" data-section="pagos-estadisticas">
         <span class="material-icons">bar_chart</span>
         <span>Estadisticas</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-ayudas" style="display:none">
+      <button class="nav-btn active" data-section="ayudas-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="ayudas-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="ayudas-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -343,6 +358,73 @@
           <span class="material-icons empty-icon">inbox</span>
           <p>Cargando estadisticas de pagos...</p>
         </div>
+      </div>
+    </section>
+
+    <!-- ========== AYUDAS SECTIONS ========== -->
+
+    <section class="content-section" id="section-ayudas-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Todas las personas que han diligenciado el formulario de Ayudas Humanitarias. Usa los filtros para buscar por nombre, documento, pais y estado.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="ayudasSearchInput" placeholder="Buscar por nombre, documento, pais..." class="search-input">
+        </div>
+        <select id="ayudasPaisFilter" class="flayer-filter">
+          <option value="">Todos los paises</option>
+        </select>
+        <select id="ayudasEstadoFilter" class="flayer-filter">
+          <option value="">Todos los estados</option>
+          <option value="completo">Completo</option>
+          <option value="sin_banco">Sin banco (N/A)</option>
+          <option value="incompleto">Incompleto</option>
+        </select>
+        <span class="table-count" id="ayudasTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="ayudasTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nombres y Apellidos</th>
+              <th>Cedula / DNI</th>
+              <th>Pais</th>
+              <th>Telefono</th>
+              <th>Estado</th>
+              <th>Actualizacion</th>
+            </tr>
+          </thead>
+          <tbody id="ayudasTableBody">
+            <tr class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-ayudas-estadisticas">
+      <div class="stats-grid" id="ayudasStatsGrid"></div>
+    </section>
+
+    <section class="content-section" id="section-ayudas-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargara un archivo de Excel con todos los datos registrados en el bot de Ayudas Humanitarias, incluyendo informacion personal y bancaria.</p>
+        <button class="btn btn-download" id="btnAyudasDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="ayudasDownloadInfo"></p>
       </div>
     </section>
   </main>

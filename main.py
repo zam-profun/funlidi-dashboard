@@ -19,6 +19,8 @@ load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+AYUDAS_SUPABASE_URL = os.environ.get("AYUDAS_SUPABASE_URL") or os.environ["SUPABASE_URL"]
+AYUDAS_SUPABASE_KEY = os.environ.get("AYUDAS_SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_SERVICE_KEY"]
 
 COL_TZ = timezone(timedelta(hours=-5))
 
@@ -86,6 +88,7 @@ def _load_pagos_data():
     return records
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_ayudas: Client = create_client(AYUDAS_SUPABASE_URL, AYUDAS_SUPABASE_KEY)
 
 app = FastAPI()
 
@@ -447,6 +450,153 @@ async def download_xlsx():
 
     hoy = datetime.now(COL_TZ)
     filename = f"Registros_FUNLIDI_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ========== AYUDAS HUMANITARIAS ENDPOINTS ==========
+
+AYUDAS_TABLE = "ayudas_humanitarias"
+AYUDAS_PERSONAL_FIELDS = ["nombre", "dni", "pais", "ciudad", "pasaporte", "ocupacion", "telefono", "correo"]
+AYUDAS_BANK_FIELDS = ["banco", "swift", "nbancaria", "tipocuenta"]
+AYUDAS_ALL_FIELDS = AYUDAS_PERSONAL_FIELDS + AYUDAS_BANK_FIELDS
+
+
+def _ayudas_estado(r):
+    personal = all(r.get(f) and str(r.get(f, "")).strip() for f in AYUDAS_PERSONAL_FIELDS)
+    if not personal:
+        return "incompleto"
+    bank = all(r.get(f) and str(r.get(f, "")).strip() for f in AYUDAS_BANK_FIELDS)
+    if not bank:
+        return "sin_banco"
+    bank_real = all(
+        str(r.get(f, "")).strip() not in ("", "N/A") for f in AYUDAS_BANK_FIELDS
+    )
+    if bank_real:
+        return "completo"
+    return "sin_banco"
+
+
+@app.get("/api/ayudas/data")
+async def get_ayudas_data():
+    result = supabase_ayudas.table(AYUDAS_TABLE).select("*").order("updated_at", desc=True).execute()
+    rows = result.data or []
+    for r in rows:
+        r["estado"] = _ayudas_estado(r)
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/ayudas/stats")
+async def get_ayudas_stats():
+    result = supabase_ayudas.table(AYUDAS_TABLE).select("*").execute()
+    rows = result.data or []
+    total = len(rows)
+    completos = sum(1 for r in rows if _ayudas_estado(r) == "completo")
+    sin_banco = sum(1 for r in rows if _ayudas_estado(r) == "sin_banco")
+    incompletos = sum(1 for r in rows if _ayudas_estado(r) == "incompleto")
+    paises = set()
+    for r in rows:
+        p = r.get("pais")
+        if p and str(p).strip() and str(p).strip() != "VACIO":
+            paises.add(str(p).strip().upper())
+    ultima = max(
+        (r.get("updated_at") or r.get("created_at") or "") for r in rows
+    ) if rows else None
+
+    ahora_col = datetime.now(COL_TZ)
+    hoy_inicio_col = ahora_col.replace(hour=0, minute=0, second=0, microsecond=0)
+    semana_inicio_col = hoy_inicio_col - timedelta(days=7)
+    registros_hoy = 0
+    registros_semana = 0
+    for r in rows:
+        c = r.get("created_at")
+        if c:
+            try:
+                d = datetime.fromisoformat(c.replace("Z", "+00:00")).astimezone(COL_TZ)
+                if d >= hoy_inicio_col:
+                    registros_hoy += 1
+                if d >= semana_inicio_col:
+                    registros_semana += 1
+            except Exception:
+                pass
+
+    paises_list = sorted(paises) if paises else []
+    return {
+        "total": total,
+        "completos": completos,
+        "sin_banco": sin_banco,
+        "incompletos": incompletos,
+        "ultima_actualizacion": ultima,
+        "registros_hoy": registros_hoy,
+        "registros_semana": registros_semana,
+        "paises": paises_list,
+    }
+
+
+@app.get("/api/ayudas/download")
+async def download_ayudas_xlsx():
+    result = supabase_ayudas.table(AYUDAS_TABLE).select("*").order("updated_at", desc=True).execute()
+    rows = result.data or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ayudas Humanitarias"
+
+    headers = [
+        "Usuario Telegram", "Tratamiento Datos",
+        "Nombres y Apellidos", "Cedula/DNI", "Pais", "Ciudad",
+        "Pasaporte", "Ocupacion", "Telefono", "Correo",
+        "Banco", "Swift", "Numero Cuenta", "Tipo Cuenta",
+        "Fecha Creacion", "Ultima Actualizacion",
+    ]
+    ws.append(headers)
+
+    for r in rows:
+        usuario = r.get("telegram_username")
+        if usuario:
+            usuario = "@" + usuario
+        else:
+            usuario = "-"
+        ws.append([
+            usuario,
+            "Si" if r.get("data_treatment_accepted") else "No",
+            r.get("nombre") or "-", r.get("dni") or "-",
+            r.get("pais") or "-", r.get("ciudad") or "-",
+            r.get("pasaporte") or "-", r.get("ocupacion") or "-",
+            r.get("telefono") or "-", r.get("correo") or "-",
+            r.get("banco") or "-", r.get("swift") or "-",
+            r.get("nbancaria") or "-", r.get("tipocuenta") or "-",
+            formatear_fecha_simple(r.get("created_at")),
+            formatear_fecha_simple(r.get("updated_at")),
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="64B5F6", end_color="64B5F6", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"Ayudas_Humanitarias_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

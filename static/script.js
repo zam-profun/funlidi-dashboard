@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initSearch();
   initPagosSearch();
   initDownload();
+  initAyudasSearch();
+  initAyudasDownload();
   initTimezone();
 
   loadSection("registros");
@@ -40,7 +42,10 @@ function switchModule(module) {
   currentModule = module;
   document.getElementById("nav-bot").style.display = module === "bot" ? "" : "none";
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
+  document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
+
+  document.body.classList.toggle("theme-ayudas", module === "ayudas");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -68,6 +73,9 @@ function switchSection(section) {
     "pagos-flayer": "Por Flayer",
     "pagos-personas": "Personas",
     "pagos-estadisticas": "Estadisticas de Pagos",
+    "ayudas-registros": "Registros - Ayudas H.",
+    "ayudas-estadisticas": "Estadisticas - Ayudas H.",
+    "ayudas-descargar": "Descargar - Ayudas H.",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -81,6 +89,8 @@ function loadSection(section) {
   if (section === "pagos-flayer") loadPagosFlayer();
   if (section === "pagos-personas") loadPagosPersonas();
   if (section === "pagos-estadisticas") loadPagosStats();
+  if (section === "ayudas-registros") loadAyudasRegistros();
+  if (section === "ayudas-estadisticas") loadAyudasStats();
 }
 
 function startAutoRefresh() {
@@ -716,6 +726,238 @@ async function loadPagosStats() {
     updateRefreshIndicator(false);
   } catch (err) {
     el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas de pagos.</p></div>';
+  }
+}
+
+// ========== AYUDAS HUMANITARIAS FUNCTIONS ==========
+
+let ayudasAllData = [];
+let ayudasExpandedRow = null;
+
+function initAyudasSearch() {
+  document.getElementById("ayudasSearchInput").addEventListener("input", renderAyudasTable);
+  document.getElementById("ayudasPaisFilter").addEventListener("change", renderAyudasTable);
+  document.getElementById("ayudasEstadoFilter").addEventListener("change", renderAyudasTable);
+}
+
+function initAyudasDownload() {
+  document.getElementById("btnAyudasDownload").addEventListener("click", async () => {
+    const btn = document.getElementById("btnAyudasDownload");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    try {
+      const resp = await fetch("/api/ayudas/download");
+      if (!resp.ok) throw new Error("Error al descargar");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getAyudasFilename(resp);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      document.getElementById("ayudasDownloadInfo").textContent = "Descarga completada.";
+    } catch (err) {
+      document.getElementById("ayudasDownloadInfo").textContent = "Error al descargar.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">description</span> Descargar XLSX';
+    }
+  });
+}
+
+function getAyudasFilename(resp) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  const hoy = new Date();
+  return `Ayudas_Humanitarias_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+function getCountryFlag(pais) {
+  const flags = {
+    "COLOMBIA": "🇨🇴", "VENEZUELA": "🇻🇪", "ECUADOR": "🇪🇨", "PERU": "🇵🇪",
+    "ARGENTINA": "🇦🇷", "CHILE": "🇨🇱", "BRASIL": "🇧🇷", "BOLIVIA": "🇧🇴",
+    "PARAGUAY": "🇵🇾", "URUGUAY": "🇺🇾", "PANAMA": "🇵🇦", "COSTA RICA": "🇨🇷",
+    "NICARAGUA": "🇳🇮", "HONDURAS": "🇭🇳", "EL SALVADOR": "🇸🇻", "GUATEMALA": "🇬🇹",
+    "MEXICO": "🇲🇽", "ESTADOS UNIDOS": "🇺🇸", "ESPAÑA": "🇪🇸", "ITALIA": "🇮🇹",
+    "FRANCIA": "🇫🇷", "ALEMANIA": "🇩🇪", "REINO UNIDO": "🇬🇧", "CANADA": "🇨🇦",
+    "REPUBLICA DOMINICANA": "🇩🇴", "CUBA": "🇨🇺", "PUERTO RICO": "🇵🇷",
+    "HAITI": "🇭🇹", "JAPON": "🇯🇵", "CHINA": "🇨🇳",
+  };
+  const key = (pais || "").toUpperCase().trim();
+  return flags[key] || "🌍";
+}
+
+function getAyudasEstadoBadge(estado) {
+  if (estado === "completo") return '<span class="estado-badge estado-completo">Completo</span>';
+  if (estado === "sin_banco") return '<span class="estado-badge estado-sinbanco">Sin banco</span>';
+  return '<span class="estado-badge estado-incompleto">Incompleto</span>';
+}
+
+function buildAyudasDetailHtml(r, idx) {
+  const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" ? String(v).trim() : "—";
+  const flag = getCountryFlag(r.pais);
+  return `
+    <div class="ayudas-detail-card">
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">person</span> INFORMACION PERSONAL</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${f(r.nombre)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Cedula/DNI:</span><span class="ayudas-detail-value">${f(r.dni)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">${flag} ${f(r.pais)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">location_city</span><span class="ayudas-detail-label">Ciudad:</span><span class="ayudas-detail-value">${f(r.ciudad)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">flight</span><span class="ayudas-detail-label">Pasaporte:</span><span class="ayudas-detail-value">${f(r.pasaporte)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">work</span><span class="ayudas-detail-label">Ocupacion:</span><span class="ayudas-detail-value">${f(r.ocupacion)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Telefono:</span><span class="ayudas-detail-value">${f(r.telefono)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Correo:</span><span class="ayudas-detail-value">${f(r.correo)}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">account_balance</span> INFORMACION BANCARIA</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">account_balance</span><span class="ayudas-detail-label">Banco:</span><span class="ayudas-detail-value">${f(r.banco)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">swap_horiz</span><span class="ayudas-detail-label">Swift:</span><span class="ayudas-detail-value">${f(r.swift)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">credit_card</span><span class="ayudas-detail-label">Cuenta:</span><span class="ayudas-detail-value">${f(r.nbancaria)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">category</span><span class="ayudas-detail-label">Tipo:</span><span class="ayudas-detail-value">${f(r.tipocuenta)}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section ayudas-detail-section-meta">
+        <div class="ayudas-detail-meta-row">
+          <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
+          <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
+        </div>
+      </div>
+    </div>`;
+}
+
+function toggleAyudasDetail(idx) {
+  const tbody = document.getElementById("ayudasTableBody");
+  if (ayudasExpandedRow === idx) {
+    ayudasExpandedRow = null;
+    renderAyudasTable();
+    return;
+  }
+  ayudasExpandedRow = idx;
+  renderAyudasTable();
+}
+
+async function loadAyudasRegistros() {
+  const tbody = document.getElementById("ayudasTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/ayudas/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    ayudasAllData = json.data || [];
+
+    const paises = new Set();
+    for (const r of ayudasAllData) {
+      if (r.pais && r.pais.trim() && r.pais !== "VACIO") paises.add(r.pais.trim().toUpperCase());
+    }
+    const sel = document.getElementById("ayudasPaisFilter");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Todos los paises</option>';
+    for (const p of [...paises].sort()) {
+      sel.innerHTML += '<option value="' + p.replace(/"/g, "&quot;") + '">' + p + '</option>';
+    }
+    sel.value = cur;
+
+    renderAyudasTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function renderAyudasTable() {
+  const tbody = document.getElementById("ayudasTableBody");
+  const search = document.getElementById("ayudasSearchInput").value.toLowerCase();
+  const paisFilter = document.getElementById("ayudasPaisFilter").value;
+  const estadoFilter = document.getElementById("ayudasEstadoFilter").value;
+
+  let filtered = ayudasAllData;
+  if (search) {
+    filtered = filtered.filter((r) =>
+      [r.nombre, r.dni, r.pais, r.ciudad, r.telefono, r.correo, r.banco, r.ocupacion, r.pasaporte]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
+  }
+  if (paisFilter) {
+    filtered = filtered.filter((r) => (r.pais || "").toUpperCase().trim() === paisFilter);
+  }
+  if (estadoFilter) {
+    filtered = filtered.filter((r) => r.estado === estadoFilter);
+  }
+
+  document.getElementById("ayudasTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search || paisFilter || estadoFilter
+      ? "No se encontraron registros con esos filtros."
+      : "Aun no hay registros de Ayudas Humanitarias.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const flag = getCountryFlag(r.pais);
+    const expandIcon = ayudasExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = ayudasExpandedRow === i;
+
+    html += '<tr class="ayudas-row" onclick="toggleAyudasDetail(' + i + ')">';
+    html += '<td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td><strong>' + (r.nombre || "—") + '</strong></td>';
+    html += '<td>' + (r.dni || "—") + '</td>';
+    html += '<td>' + flag + ' ' + (r.pais || "—") + '</td>';
+    html += '<td>' + (r.telefono || "—") + '</td>';
+    html += '<td>' + getAyudasEstadoBadge(r.estado) + '</td>';
+    html += '<td>' + formatDate(r.updated_at || r.created_at) + '</td>';
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="7">' + buildAyudasDetailHtml(r, i) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+async function loadAyudasStats() {
+  const el = document.getElementById("ayudasStatsGrid");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+
+  try {
+    const resp = await fetch("/api/ayudas/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total + '</span><span class="stat-label">Total de registros</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">check_circle</span><div class="stat-info"><span class="stat-value">' + d.completos + '</span><span class="stat-label">Completos</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">account_balance</span><div class="stat-info"><span class="stat-value">' + d.sin_banco + '</span><span class="stat-label">Sin banco (N/A)</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">warning</span><div class="stat-info"><span class="stat-value">' + d.incompletos + '</span><span class="stat-label">Incompletos</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">public</span><div class="stat-info"><span class="stat-value">' + d.paises.length + '</span><span class="stat-label">Paises distintos</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">today</span><div class="stat-info"><span class="stat-value">' + d.registros_hoy + '</span><span class="stat-label">Registros de hoy</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">date_range</span><div class="stat-info"><span class="stat-value">' + d.registros_semana + '</span><span class="stat-label">Registros esta semana</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value stat-date">' + (d.ultima_actualizacion ? formatDateStrict(d.ultima_actualizacion) : "—") + '</span><span class="stat-label">Ultima actualizacion</span></div></div>';
+
+    if (d.paises.length > 0) {
+      el.innerHTML += '<div style="grid-column:1/-1;margin-top:8px"><h3 class="section-subtitle">Paises registrados</h3><div class="ayudas-paises-list">';
+      for (const p of d.paises) {
+        el.innerHTML += '<span class="ayudas-pais-tag">' + getCountryFlag(p) + ' ' + p + '</span>';
+      }
+      el.innerHTML += '</div></div>';
+    }
+
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
   }
 }
 
