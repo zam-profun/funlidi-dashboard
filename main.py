@@ -531,8 +531,8 @@ async def get_ayudas_stats():
             except Exception:
                 pass
 
-    benef_result = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("count", count="exact").execute()
-    total_benef = benef_result.count if hasattr(benef_result, "count") else 0
+    benef_result = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("*").execute()
+    total_benef = len(benef_result.data or [])
 
     paises_list = sorted(paises) if paises else []
     return {
