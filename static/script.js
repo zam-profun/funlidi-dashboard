@@ -733,6 +733,7 @@ async function loadPagosStats() {
 
 let ayudasAllData = [];
 let ayudasExpandedRow = null;
+let ayudasBenefExpanded = {};
 
 function initAyudasSearch() {
   document.getElementById("ayudasSearchInput").addEventListener("input", renderAyudasTable);
@@ -827,9 +828,18 @@ function buildAyudasDetailHtml(r, idx) {
       </div>
       <div class="ayudas-detail-section">
         <div class="ayudas-detail-title"><span class="material-icons">people</span> BENEFICIARIOS (${(r.beneficiarios||[]).length})</div>
-        ${(r.beneficiarios||[]).length === 0 ? '<div style="color:#9E9E9E;font-size:13px">No tiene beneficiarios registrados.</div>' : (r.beneficiarios||[]).map((b, bi) => `
+        ${(r.beneficiarios||[]).length === 0 ? '<div style="color:#9E9E9E;font-size:13px">No tiene beneficiarios registrados.</div>' : (r.beneficiarios||[]).map((b, bi) => {
+          const key = idx + '-' + b.beneficiary_number;
+          const isBenefExpanded = ayudasBenefExpanded[key];
+          const benefIcon = isBenefExpanded ? 'expand_less' : 'expand_more';
+          const benefName = f(b.nombre);
+          return `
           <div class="ayudas-benef-card">
-            <div class="ayudas-benef-header"><span class="material-icons">person</span> Beneficiario #${b.beneficiary_number}</div>
+            <div class="ayudas-benef-header" onclick="event.stopPropagation();toggleAyudasBenef(${idx}, ${b.beneficiary_number})">
+              <span class="material-icons">person</span> Beneficiario #${b.beneficiary_number} - ${benefName}
+              <span class="material-icons ayudas-expand-icon" style="margin-left:auto">${benefIcon}</span>
+            </div>
+            ${isBenefExpanded ? `
             <div class="ayudas-benef-grid">
               <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${f(b.nombre)}</span></div>
               <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Cedula/DNI:</span><span class="ayudas-detail-value">${f(b.dni)}</span></div>
@@ -839,9 +849,9 @@ function buildAyudasDetailHtml(r, idx) {
               <div class="ayudas-detail-item"><span class="material-icons">work</span><span class="ayudas-detail-label">Ocupacion:</span><span class="ayudas-detail-value">${f(b.ocupacion)}</span></div>
               <div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Telefono:</span><span class="ayudas-detail-value">${f(b.telefono)}</span></div>
               <div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Correo:</span><span class="ayudas-detail-value">${f(b.correo)}</span></div>
-            </div>
-          </div>
-        `).join('')}
+            </div>` : ''}
+          </div>`;
+        }).join('')}
       </div>
       <div class="ayudas-detail-section ayudas-detail-section-meta">
         <div class="ayudas-detail-meta-row">
@@ -856,10 +866,22 @@ function toggleAyudasDetail(idx) {
   const tbody = document.getElementById("ayudasTableBody");
   if (ayudasExpandedRow === idx) {
     ayudasExpandedRow = null;
+    ayudasBenefExpanded = {};
     renderAyudasTable();
     return;
   }
   ayudasExpandedRow = idx;
+  ayudasBenefExpanded = {};
+  renderAyudasTable();
+}
+
+function toggleAyudasBenef(rowIdx, benefN) {
+  const key = rowIdx + '-' + benefN;
+  if (ayudasBenefExpanded[key]) {
+    delete ayudasBenefExpanded[key];
+  } else {
+    ayudasBenefExpanded[key] = true;
+  }
   renderAyudasTable();
 }
 
