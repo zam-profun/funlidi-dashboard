@@ -1013,3 +1013,50 @@ body {
   font-weight: 500;
   color: #424242;
 }
+
+.benef-count-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--clr-primary);
+  color: #FFFFFF;
+  vertical-align: middle;
+}
+
+.ayudas-benef-card {
+  background: #FAFAFA;
+  border: 1px solid #E0E0E0;
+  border-left: 3px solid var(--clr-primary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+}
+
+.ayudas-benef-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--clr-primary);
+  margin-bottom: 8px;
+}
+
+.ayudas-benef-header .material-icons {
+  font-size: 18px;
+}
+
+.ayudas-benef-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+}
+
+@media (max-width: 768px) {
+  .ayudas-benef-grid {
+    grid-template-columns: 1fr;
+  }
+}

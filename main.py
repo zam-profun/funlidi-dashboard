@@ -461,6 +461,7 @@ async def download_xlsx():
 # ========== AYUDAS HUMANITARIAS ENDPOINTS ==========
 
 AYUDAS_TABLE = "ayudas_humanitarias"
+AYUDAS_BENEF_TABLE = "ayudas_beneficiarios"
 AYUDAS_PERSONAL_FIELDS = ["nombre", "dni", "pais", "ciudad", "pasaporte", "ocupacion", "telefono", "correo"]
 AYUDAS_BANK_FIELDS = ["banco", "swift", "nbancaria", "tipocuenta"]
 AYUDAS_ALL_FIELDS = AYUDAS_PERSONAL_FIELDS + AYUDAS_BANK_FIELDS
@@ -487,6 +488,12 @@ async def get_ayudas_data():
     rows = result.data or []
     for r in rows:
         r["estado"] = _ayudas_estado(r)
+        uid = r.get("telegram_user_id")
+        if uid is not None:
+            benef = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("*").eq("telegram_user_id", uid).order("beneficiary_number").execute()
+            r["beneficiarios"] = benef.data or []
+        else:
+            r["beneficiarios"] = []
     return {"data": rows, "total": len(rows)}
 
 
@@ -524,6 +531,9 @@ async def get_ayudas_stats():
             except Exception:
                 pass
 
+    benef_result = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("count", count="exact").execute()
+    total_benef = benef_result.count if hasattr(benef_result, "count") else 0
+
     paises_list = sorted(paises) if paises else []
     return {
         "total": total,
@@ -534,6 +544,7 @@ async def get_ayudas_stats():
         "registros_hoy": registros_hoy,
         "registros_semana": registros_semana,
         "paises": paises_list,
+        "total_beneficiarios": total_benef,
     }
 
 
@@ -591,6 +602,48 @@ async def download_ayudas_xlsx():
             except Exception:
                 pass
         ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    ws2 = wb.create_sheet(title="Beneficiarios")
+    benef_headers = [
+        "Usuario Telegram", "Beneficiario #",
+        "Nombres y Apellidos", "Cedula/DNI", "Pais", "Ciudad",
+        "Pasaporte", "Ocupacion", "Telefono", "Correo",
+    ]
+    ws2.append(benef_headers)
+    for r in rows:
+        usuario = r.get("telegram_username")
+        if usuario:
+            usuario = "@" + usuario
+        else:
+            usuario = "-"
+        uid = r.get("telegram_user_id")
+        if uid is not None:
+            benef_res = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("*").eq("telegram_user_id", uid).order("beneficiary_number").execute()
+            for b in (benef_res.data or []):
+                ws2.append([
+                    usuario,
+                    b.get("beneficiary_number", ""),
+                    b.get("nombre") or "-", b.get("dni") or "-",
+                    b.get("pais") or "-", b.get("ciudad") or "-",
+                    b.get("pasaporte") or "-", b.get("ocupacion") or "-",
+                    b.get("telefono") or "-", b.get("correo") or "-",
+                ])
+    from openpyxl.styles import Font, PatternFill
+    header_fill2 = PatternFill(start_color="64B5F6", end_color="64B5F6", fill_type="solid")
+    header_font2 = Font(bold=True, size=11)
+    for cell in ws2[1]:
+        cell.fill = header_fill2
+        cell.font = header_font2
+    for column in ws2.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws2.column_dimensions[col_letter].width = min(max_len + 4, 40)
 
     output = io.BytesIO()
     wb.save(output)

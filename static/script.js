@@ -825,6 +825,24 @@ function buildAyudasDetailHtml(r, idx) {
           <div class="ayudas-detail-item"><span class="material-icons">category</span><span class="ayudas-detail-label">Tipo:</span><span class="ayudas-detail-value">${f(r.tipocuenta)}</span></div>
         </div>
       </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">people</span> BENEFICIARIOS (${(r.beneficiarios||[]).length})</div>
+        ${(r.beneficiarios||[]).length === 0 ? '<div style="color:#9E9E9E;font-size:13px">No tiene beneficiarios registrados.</div>' : (r.beneficiarios||[]).map((b, bi) => `
+          <div class="ayudas-benef-card">
+            <div class="ayudas-benef-header"><span class="material-icons">person</span> Beneficiario #${b.beneficiary_number}</div>
+            <div class="ayudas-benef-grid">
+              <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${f(b.nombre)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Cedula/DNI:</span><span class="ayudas-detail-value">${f(b.dni)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">${getCountryFlag(b.pais)} ${f(b.pais)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">location_city</span><span class="ayudas-detail-label">Ciudad:</span><span class="ayudas-detail-value">${f(b.ciudad)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">flight</span><span class="ayudas-detail-label">Pasaporte:</span><span class="ayudas-detail-value">${f(b.pasaporte)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">work</span><span class="ayudas-detail-label">Ocupacion:</span><span class="ayudas-detail-value">${f(b.ocupacion)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Telefono:</span><span class="ayudas-detail-value">${f(b.telefono)}</span></div>
+              <div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Correo:</span><span class="ayudas-detail-value">${f(b.correo)}</span></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
       <div class="ayudas-detail-section ayudas-detail-section-meta">
         <div class="ayudas-detail-meta-row">
           <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
@@ -882,10 +900,16 @@ function renderAyudasTable() {
 
   let filtered = ayudasAllData;
   if (search) {
-    filtered = filtered.filter((r) =>
-      [r.nombre, r.dni, r.pais, r.ciudad, r.telefono, r.correo, r.banco, r.ocupacion, r.pasaporte]
-        .some((v) => v && String(v).toLowerCase().includes(search))
-    );
+    filtered = filtered.filter((r) => {
+      const mainMatch = [r.nombre, r.dni, r.pais, r.ciudad, r.telefono, r.correo, r.banco, r.ocupacion, r.pasaporte]
+        .some((v) => v && String(v).toLowerCase().includes(search));
+      if (mainMatch) return true;
+      const benefs = r.beneficiarios || [];
+      return benefs.some((b) =>
+        [b.nombre, b.dni, b.pais, b.ciudad, b.telefono, b.correo, b.ocupacion, b.pasaporte]
+          .some((v) => v && String(v).toLowerCase().includes(search))
+      );
+    });
   }
   if (paisFilter) {
     filtered = filtered.filter((r) => (r.pais || "").toUpperCase().trim() === paisFilter);
@@ -913,7 +937,9 @@ function renderAyudasTable() {
 
     html += '<tr class="ayudas-row" onclick="toggleAyudasDetail(' + i + ')">';
     html += '<td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
-    html += '<td><strong>' + (r.nombre || "—") + '</strong></td>';
+    const benefCount = (r.beneficiarios || []).length;
+    const benefBadge = benefCount > 0 ? ' <span class="benef-count-badge">' + benefCount + ' benef.</span>' : '';
+    html += '<td><strong>' + (r.nombre || "—") + '</strong>' + benefBadge + '</td>';
     html += '<td>' + (r.dni || "—") + '</td>';
     html += '<td>' + flag + ' ' + (r.pais || "—") + '</td>';
     html += '<td>' + (r.telefono || "—") + '</td>';
@@ -942,6 +968,7 @@ async function loadAyudasStats() {
       '<div class="stat-card"><span class="material-icons stat-icon">check_circle</span><div class="stat-info"><span class="stat-value">' + d.completos + '</span><span class="stat-label">Completos</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">account_balance</span><div class="stat-info"><span class="stat-value">' + d.sin_banco + '</span><span class="stat-label">Sin banco (N/A)</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">warning</span><div class="stat-info"><span class="stat-value">' + d.incompletos + '</span><span class="stat-label">Incompletos</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + (d.total_beneficiarios || 0) + '</span><span class="stat-label">Beneficiarios</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">public</span><div class="stat-info"><span class="stat-value">' + d.paises.length + '</span><span class="stat-label">Paises distintos</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">today</span><div class="stat-info"><span class="stat-value">' + d.registros_hoy + '</span><span class="stat-label">Registros de hoy</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">date_range</span><div class="stat-info"><span class="stat-value">' + d.registros_semana + '</span><span class="stat-label">Registros esta semana</span></div></div>' +
