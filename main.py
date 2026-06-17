@@ -384,6 +384,18 @@ async def get_pagos_personas():
     return {"personas": persona_list, "total": len(persona_list)}
 
 
+def formatear_fecha_simple(valor):
+    if not valor:
+        return "-"
+    try:
+        d = datetime.fromisoformat(valor.replace("Z", "+00:00")).astimezone(COL_TZ)
+        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        return f"{d.day} de {meses[d.month - 1]} de {d.year} a las {d.hour}:{d.minute:02d}"
+    except Exception:
+        return str(valor)
+
+
 @app.get("/api/download")
 async def download_xlsx():
     result = supabase.table("usuarios_funlidi").select("*").order("updated_at", desc=True).execute()
@@ -399,17 +411,6 @@ async def download_xlsx():
         "Fecha de Creacion", "Ultima Actualizacion",
     ]
     ws.append(headers)
-
-    def formatear_fecha_simple(valor):
-        if not valor:
-            return "-"
-        try:
-            d = datetime.fromisoformat(valor.replace("Z", "+00:00")).astimezone(COL_TZ)
-            meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-            return f"{d.day} de {meses[d.month - 1]} de {d.year} a las {d.hour}:{d.minute:02d}"
-        except Exception:
-            return str(valor)
 
     for r in rows:
         usuario = r.get("telegram_username")

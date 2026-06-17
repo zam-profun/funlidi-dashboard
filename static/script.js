@@ -44,13 +44,13 @@ function switchModule(module) {
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
+  document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
   if (firstBtn) {
-    activeNav.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
     firstBtn.classList.add("active");
     const section = firstBtn.dataset.section;
     switchSection(section);
