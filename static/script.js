@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initDownload();
   initAyudasSearch();
   initAyudasDownload();
+  initInventarioSearch();
+  initInventarioDownload();
   initTimezone();
 
   loadSection("registros");
@@ -43,10 +45,12 @@ function switchModule(module) {
   document.getElementById("nav-bot").style.display = module === "bot" ? "" : "none";
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
+  document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
+  document.body.classList.toggle("theme-inventario", module === "inventario");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -76,6 +80,9 @@ function switchSection(section) {
     "ayudas-registros": "Registros - Ayudas H.",
     "ayudas-estadisticas": "Estadisticas - Ayudas H.",
     "ayudas-descargar": "Descargar - Ayudas H.",
+    "inventario-registros": "Registros - Inventario",
+    "inventario-estadisticas": "Estadisticas - Inventario",
+    "inventario-descargar": "Descargar - Inventario",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -91,6 +98,8 @@ function loadSection(section) {
   if (section === "pagos-estadisticas") loadPagosStats();
   if (section === "ayudas-registros") loadAyudasRegistros();
   if (section === "ayudas-estadisticas") loadAyudasStats();
+  if (section === "inventario-registros") loadInventarioRegistros();
+  if (section === "inventario-estadisticas") loadInventarioStats();
 }
 
 function startAutoRefresh() {
@@ -1011,3 +1020,153 @@ async function loadAyudasStats() {
 }
 
 setInterval(tickRefreshIndicator, 5000);
+
+
+// ========== INVENTARIO FUNCTIONS ==========
+
+let inventarioAllData = [];
+
+function initInventarioSearch() {
+  document.getElementById("inventarioSearchInput").addEventListener("input", renderInventarioTable);
+  document.getElementById("inventarioPaisFilter").addEventListener("change", renderInventarioTable);
+}
+
+function initInventarioDownload() {
+  document.getElementById("btnInventarioDownload").addEventListener("click", async () => {
+    const btn = document.getElementById("btnInventarioDownload");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    try {
+      const resp = await fetch("/api/inventario/download");
+      if (!resp.ok) throw new Error("Error al descargar");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getInventarioFilename(resp);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      document.getElementById("inventarioDownloadInfo").textContent = "Descarga completada.";
+    } catch (err) {
+      document.getElementById("inventarioDownloadInfo").textContent = "Error al descargar.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">description</span> Descargar XLSX';
+    }
+  });
+}
+
+function getInventarioFilename(resp) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  const hoy = new Date();
+  return `Inventario_Adquisiciones_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+async function loadInventarioRegistros() {
+  const tbody = document.getElementById("inventarioTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/inventario/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    inventarioAllData = json.data || [];
+
+    const paises = new Set();
+    for (const r of inventarioAllData) {
+      if (r.pais && r.pais.trim() && r.pais !== "VACIO") paises.add(r.pais.trim().toUpperCase());
+    }
+    const sel = document.getElementById("inventarioPaisFilter");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Todos los paises</option>';
+    for (const p of [...paises].sort()) {
+      sel.innerHTML += '<option value="' + p.replace(/"/g, "&quot;") + '">' + p + '</option>';
+    }
+    sel.value = cur;
+
+    renderInventarioTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function renderInventarioTable() {
+  const tbody = document.getElementById("inventarioTableBody");
+  const search = document.getElementById("inventarioSearchInput").value.toLowerCase();
+  const paisFilter = document.getElementById("inventarioPaisFilter").value;
+
+  let filtered = inventarioAllData;
+  if (search) {
+    filtered = filtered.filter((r) => {
+      return [r.nombre, r.dni, r.pais, r.telegram_username]
+        .some((v) => v && String(v).toLowerCase().includes(search));
+    });
+  }
+  if (paisFilter) {
+    filtered = filtered.filter((r) => (r.pais || "").toUpperCase().trim() === paisFilter);
+  }
+
+  document.getElementById("inventarioTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search || paisFilter
+      ? "No se encontraron registros con esos filtros."
+      : "Aún no hay registros de Inventario.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const flag = getCountryFlag(r.pais);
+    const usuario = r.telegram_username ? "@" + r.telegram_username : "-";
+
+    html += '<tr>';
+    html += '<td>' + usuario + '</td>';
+    html += '<td><strong>' + (r.nombre || "—") + '</strong></td>';
+    html += '<td>' + (r.dni || "—") + '</td>';
+    html += '<td>' + flag + ' ' + (r.pais || "—") + '</td>';
+    html += '<td class="valor-cell">' + (r.cajamicro || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.cajadinar || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.per_aleman || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.per_top || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.per_dragon || 0) + '</td>';
+    html += '<td>' + formatDate(r.updated_at || r.created_at) + '</td>';
+    html += '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+async function loadInventarioStats() {
+  const el = document.getElementById("inventarioStatsGrid");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+
+  try {
+    const resp = await fetch("/api/inventario/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total + '</span><span class="stat-label">Total de registros</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">inventory_2</span><div class="stat-info"><span class="stat-value">' + d.cajamicro_total + '</span><span class="stat-label">Total Cajas Micro</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">inventory_2</span><div class="stat-info"><span class="stat-value">' + d.cajadinar_total + '</span><span class="stat-label">Total Cajas Dinar</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">article</span><div class="stat-info"><span class="stat-value">' + d.per_aleman_total + '</span><span class="stat-label">Pergaminos Alemanes</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">article</span><div class="stat-info"><span class="stat-value">' + d.per_top_total + '</span><span class="stat-label">Pergaminos Top Nonillon</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">inventory_2</span><div class="stat-info"><span class="stat-value">' + d.per_dragon_total + '</span><span class="stat-label">Cajas Perg. Dragones</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">today</span><div class="stat-info"><span class="stat-value">' + d.registros_hoy + '</span><span class="stat-label">Registros de hoy</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">date_range</span><div class="stat-info"><span class="stat-value">' + d.registros_semana + '</span><span class="stat-label">Registros esta semana</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value stat-date">' + (d.ultima_actualizacion ? formatDateStrict(d.ultima_actualizacion) : "—") + '</span><span class="stat-label">Ultima actualizacion</span></div></div>';
+
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}

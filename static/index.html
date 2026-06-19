@@ -17,6 +17,7 @@
           <option value="bot">FUNLIDI - BOT</option>
           <option value="pagos">FUNLIDI - PAGOS</option>
           <option value="ayudas">BOT - AYUDAS H.</option>
+          <option value="inventario">BOT - INVENTARIO</option>
         </select>
       </div>
     </div>
@@ -70,6 +71,20 @@
         <span>Estadisticas</span>
       </button>
       <button class="nav-btn" data-section="ayudas-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-inventario" style="display:none">
+      <button class="nav-btn active" data-section="inventario-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="inventario-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="inventario-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
@@ -425,6 +440,72 @@
           Descargar XLSX
         </button>
         <p class="download-info" id="ayudasDownloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== INVENTARIO SECTIONS ========== -->
+
+    <section class="content-section" id="section-inventario-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Todos los registros de adquisiciones e inventario de los usuarios. Puedes buscar por nombre, documento o país.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="inventarioSearchInput" placeholder="Buscar por nombre, documento, país..." class="search-input">
+        </div>
+        <select id="inventarioPaisFilter" class="flayer-filter">
+          <option value="">Todos los paises</option>
+        </select>
+        <span class="table-count" id="inventarioTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="inventarioTable">
+          <thead>
+            <tr>
+              <th>Usuario Telegram</th>
+              <th>Nombres y Apellidos</th>
+              <th>Cedula / DNI</th>
+              <th>Pais</th>
+              <th>Cajas Micro</th>
+              <th>Cajas Dinar</th>
+              <th>Perg. Aleman</th>
+              <th>Perg. Top</th>
+              <th>Cajas Dragon</th>
+              <th>Actualizacion</th>
+            </tr>
+          </thead>
+          <tbody id="inventarioTableBody">
+            <tr class="empty-row">
+              <td colspan="10">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-inventario-estadisticas">
+      <div class="stats-grid" id="inventarioStatsGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <section class="content-section" id="section-inventario-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargará un archivo de Excel con todos los datos registrados en el bot de Inventario de Adquisiciones, incluyendo las cantidades detalladas de materiales.</p>
+        <button class="btn btn-download" id="btnInventarioDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="inventarioDownloadInfo"></p>
       </div>
     </section>
   </main>

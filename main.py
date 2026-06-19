@@ -21,6 +21,8 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 AYUDAS_SUPABASE_URL = os.environ.get("AYUDAS_SUPABASE_URL") or os.environ["SUPABASE_URL"]
 AYUDAS_SUPABASE_KEY = os.environ.get("AYUDAS_SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_SERVICE_KEY"]
+INVENTARIO_SUPABASE_URL = os.environ.get("INVENTARIO_SUPABASE_URL") or os.environ["SUPABASE_URL"]
+INVENTARIO_SUPABASE_KEY = os.environ.get("INVENTARIO_SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_SERVICE_KEY"]
 
 COL_TZ = timezone(timedelta(hours=-5))
 
@@ -89,6 +91,7 @@ def _load_pagos_data():
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_ayudas: Client = create_client(AYUDAS_SUPABASE_URL, AYUDAS_SUPABASE_KEY)
+supabase_inventario: Client = create_client(INVENTARIO_SUPABASE_URL, INVENTARIO_SUPABASE_KEY)
 
 app = FastAPI()
 
@@ -651,6 +654,141 @@ async def download_ayudas_xlsx():
 
     hoy = datetime.now(COL_TZ)
     filename = f"Ayudas_Humanitarias_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ========== INVENTARIO ENDPOINTS ==========
+
+INVENTARIO_TABLE = "inventario_adquisiciones"
+
+
+@app.get("/api/inventario/data")
+async def get_inventario_data():
+    result = supabase_inventario.table(INVENTARIO_TABLE).select("*").order("updated_at", desc=True).execute()
+    rows = result.data or []
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/inventario/stats")
+async def get_inventario_stats():
+    result = supabase_inventario.table(INVENTARIO_TABLE).select("*").execute()
+    rows = result.data or []
+    total = len(rows)
+
+    cajamicro_total = sum(to_int(r.get("cajamicro")) for r in rows)
+    cajadinar_total = sum(to_int(r.get("cajadinar")) for r in rows)
+    per_aleman_total = sum(to_int(r.get("per_aleman")) for r in rows)
+    per_top_total = sum(to_int(r.get("per_top")) for r in rows)
+    per_dragon_total = sum(to_int(r.get("per_dragon")) for r in rows)
+
+    ultima = max(
+        (r.get("updated_at") or r.get("created_at") or "") for r in rows
+    ) if rows else None
+
+    ahora_col = datetime.now(COL_TZ)
+    hoy_inicio_col = ahora_col.replace(hour=0, minute=0, second=0, microsecond=0)
+    semana_inicio_col = hoy_inicio_col - timedelta(days=7)
+    registros_hoy = 0
+    registros_semana = 0
+    for r in rows:
+        c = r.get("created_at") or r.get("updated_at")
+        if c:
+            try:
+                d = datetime.fromisoformat(c.replace("Z", "+00:00")).astimezone(COL_TZ)
+                if d >= hoy_inicio_col:
+                    registros_hoy += 1
+                if d >= semana_inicio_col:
+                    registros_semana += 1
+            except Exception:
+                pass
+
+    return {
+        "total": total,
+        "cajamicro_total": cajamicro_total,
+        "cajadinar_total": cajadinar_total,
+        "per_aleman_total": per_aleman_total,
+        "per_top_total": per_top_total,
+        "per_dragon_total": per_dragon_total,
+        "ultima_actualizacion": ultima,
+        "registros_hoy": registros_hoy,
+        "registros_semana": registros_semana,
+    }
+
+
+def to_int(v):
+    if not v:
+        return 0
+    try:
+        return int(v)
+    except Exception:
+        return 0
+
+
+@app.get("/api/inventario/download")
+async def download_inventario_xlsx():
+    result = supabase_inventario.table(INVENTARIO_TABLE).select("*").order("updated_at", desc=True).execute()
+    rows = result.data or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventario de Adquisiciones"
+
+    headers = [
+        "Usuario Telegram", "Nombres y Apellidos", "Cedula/DNI", "Pais",
+        "Cajas Microlingotes", "Cajas Dinares", "Pergaminos Alemanes",
+        "Pergaminos Nonillon", "Cajas Pergaminos Dragones",
+        "Fecha Creacion", "Ultima Actualizacion",
+    ]
+    ws.append(headers)
+
+    for r in rows:
+        usuario = r.get("telegram_username")
+        if usuario:
+            usuario = "@" + usuario
+        else:
+            usuario = "-"
+        ws.append([
+            usuario,
+            r.get("nombre") or "-",
+            r.get("dni") or "-",
+            r.get("pais") or "-",
+            to_int(r.get("cajamicro")),
+            to_int(r.get("cajadinar")),
+            to_int(r.get("per_aleman")),
+            to_int(r.get("per_top")),
+            to_int(r.get("per_dragon")),
+            formatear_fecha_simple(r.get("created_at") or r.get("updated_at")),
+            formatear_fecha_simple(r.get("updated_at")),
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="81C784", end_color="81C784", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"Inventario_Adquisiciones_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
