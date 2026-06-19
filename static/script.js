@@ -1029,6 +1029,7 @@ let inventarioAllData = [];
 function initInventarioSearch() {
   document.getElementById("inventarioSearchInput").addEventListener("input", renderInventarioTable);
   document.getElementById("inventarioPaisFilter").addEventListener("change", renderInventarioTable);
+  document.getElementById("inventarioEstadoFilter").addEventListener("change", renderInventarioTable);
 }
 
 function initInventarioDownload() {
@@ -1070,7 +1071,7 @@ function getInventarioFilename(resp) {
 
 async function loadInventarioRegistros() {
   const tbody = document.getElementById("inventarioTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/inventario/data");
@@ -1093,33 +1094,105 @@ async function loadInventarioRegistros() {
     renderInventarioTable();
     updateRefreshIndicator(false);
   } catch (err) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
   }
+}
+
+let inventarioExpandedRow = null;
+
+function getInventarioEstado(r) {
+  const MATERIALS = ["cajamicro", "cajadinar", "per_aleman", "per_top", "per_dragon"];
+  const personal = r.nombre && r.dni && r.pais;
+  const hasMat = MATERIALS.some((k) => r[k] && String(r[k]).trim() !== "" && String(r[k]).trim() !== "0");
+  if (personal && hasMat) return "completo";
+  return "incompleto";
+}
+
+function getInventarioEstadoBadge(estado) {
+  if (estado === "completo") return '<span class="estado-badge estado-completo">Completo</span>';
+  return '<span class="estado-badge estado-incompleto">Incompleto</span>';
+}
+
+function buildInventarioDetailHtml(r) {
+  const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" && String(v).trim() !== "0" ? String(v).trim() : "—";
+  const flag = getCountryFlag(r.pais);
+  const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
+
+  const materials = [
+    { icon: "inventory_2", label: "Cajas Microlingotes de Oro (500 unds x 391gr)", val: f(r.cajamicro) },
+    { icon: "inventory_2", label: "Cajas Dinares Irakies Rojos (40.000 notas)",    val: f(r.cajadinar) },
+    { icon: "article",     label: "Pergaminos Alemanes",                           val: f(r.per_aleman) },
+    { icon: "article",     label: "Pergaminos Top Nonillon",                       val: f(r.per_top) },
+    { icon: "inventory_2", label: "Cajas Pergaminos Dragones Amarillos (x 200)",  val: f(r.per_dragon) },
+  ];
+
+  return `
+    <div class="ayudas-detail-card">
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">person</span> INFORMACION PERSONAL</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${f(r.nombre)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Cedula/DNI:</span><span class="ayudas-detail-value">${f(r.dni)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">${flag} ${f(r.pais)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">alternate_email</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">${usuario}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">inventory</span> MATERIAL ADQUIRIDO</div>
+        <div class="ayudas-detail-grid">
+          ${materials.map(m => `
+          <div class="ayudas-detail-item">
+            <span class="material-icons">${m.icon}</span>
+            <span class="ayudas-detail-label">${m.label}:</span>
+            <span class="ayudas-detail-value ${m.val !== '—' ? 'inventario-qty-badge' : ''}">${m.val}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="ayudas-detail-section ayudas-detail-section-meta">
+        <div class="ayudas-detail-meta-row">
+          <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
+          <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
+        </div>
+      </div>
+    </div>`;
+}
+
+function toggleInventarioDetail(idx) {
+  if (inventarioExpandedRow === idx) {
+    inventarioExpandedRow = null;
+  } else {
+    inventarioExpandedRow = idx;
+  }
+  renderInventarioTable();
 }
 
 function renderInventarioTable() {
   const tbody = document.getElementById("inventarioTableBody");
   const search = document.getElementById("inventarioSearchInput").value.toLowerCase();
   const paisFilter = document.getElementById("inventarioPaisFilter").value;
+  const estadoFilter = document.getElementById("inventarioEstadoFilter").value;
 
   let filtered = inventarioAllData;
   if (search) {
-    filtered = filtered.filter((r) => {
-      return [r.nombre, r.dni, r.pais, r.telegram_username]
-        .some((v) => v && String(v).toLowerCase().includes(search));
-    });
+    filtered = filtered.filter((r) =>
+      [r.nombre, r.dni, r.pais, r.telegram_username]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
   }
   if (paisFilter) {
     filtered = filtered.filter((r) => (r.pais || "").toUpperCase().trim() === paisFilter);
+  }
+  if (estadoFilter) {
+    filtered = filtered.filter((r) => getInventarioEstado(r) === estadoFilter);
   }
 
   document.getElementById("inventarioTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
 
   if (filtered.length === 0) {
-    const msg = search || paisFilter
+    const msg = search || paisFilter || estadoFilter
       ? "No se encontraron registros con esos filtros."
-      : "Aún no hay registros de Inventario.";
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+      : "Aun no hay registros de Inventario.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
     return;
   }
 
@@ -1127,20 +1200,21 @@ function renderInventarioTable() {
   for (let i = 0; i < filtered.length; i++) {
     const r = filtered[i];
     const flag = getCountryFlag(r.pais);
-    const usuario = r.telegram_username ? "@" + r.telegram_username : "-";
+    const estado = getInventarioEstado(r);
+    const expandIcon = inventarioExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = inventarioExpandedRow === i;
 
-    html += '<tr>';
-    html += '<td>' + usuario + '</td>';
+    html += '<tr class="ayudas-row" onclick="toggleInventarioDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
     html += '<td><strong>' + (r.nombre || "—") + '</strong></td>';
     html += '<td>' + (r.dni || "—") + '</td>';
     html += '<td>' + flag + ' ' + (r.pais || "—") + '</td>';
-    html += '<td class="valor-cell">' + (r.cajamicro || 0) + '</td>';
-    html += '<td class="valor-cell">' + (r.cajadinar || 0) + '</td>';
-    html += '<td class="valor-cell">' + (r.per_aleman || 0) + '</td>';
-    html += '<td class="valor-cell">' + (r.per_top || 0) + '</td>';
-    html += '<td class="valor-cell">' + (r.per_dragon || 0) + '</td>';
+    html += '<td>' + getInventarioEstadoBadge(estado) + '</td>';
     html += '<td>' + formatDate(r.updated_at || r.created_at) + '</td>';
     html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="6">' + buildInventarioDetailHtml(r) + '</td></tr>';
+    }
   }
   tbody.innerHTML = html;
 }

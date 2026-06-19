@@ -448,7 +448,7 @@
     <section class="content-section" id="section-inventario-registros">
       <div class="info-banner">
         <span class="material-icons">info</span>
-        <p>Todos los registros de adquisiciones e inventario de los usuarios. Puedes buscar por nombre, documento o país.</p>
+        <p>Todas las personas que han registrado su inventario de adquisiciones. Haz clic en una fila para ver el detalle completo de sus materiales.</p>
       </div>
       <div class="table-controls">
         <div class="search-wrapper">
@@ -458,27 +458,28 @@
         <select id="inventarioPaisFilter" class="flayer-filter">
           <option value="">Todos los paises</option>
         </select>
+        <select id="inventarioEstadoFilter" class="flayer-filter">
+          <option value="">Todos los estados</option>
+          <option value="completo">Completo</option>
+          <option value="incompleto">Incompleto</option>
+        </select>
         <span class="table-count" id="inventarioTableCount">0 registros</span>
       </div>
       <div class="table-wrapper">
         <table class="data-table" id="inventarioTable">
           <thead>
             <tr>
-              <th>Usuario Telegram</th>
+              <th style="width:36px"></th>
               <th>Nombres y Apellidos</th>
               <th>Cedula / DNI</th>
               <th>Pais</th>
-              <th>Cajas Micro</th>
-              <th>Cajas Dinar</th>
-              <th>Perg. Aleman</th>
-              <th>Perg. Top</th>
-              <th>Cajas Dragon</th>
+              <th>Estado</th>
               <th>Actualizacion</th>
             </tr>
           </thead>
           <tbody id="inventarioTableBody">
             <tr class="empty-row">
-              <td colspan="10">
+              <td colspan="6">
                 <div class="empty-state">
                   <span class="material-icons empty-icon">inbox</span>
                   <p>Cargando datos...</p>
