@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initInventarioDownload();
   initConsultaSearch();
   initTimezone();
+  initFarleySearch();
 
   loadSection("registros");
   startAutoRefresh();
@@ -48,11 +49,13 @@ function switchModule(module) {
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
   document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
+  document.getElementById("nav-farley").style.display = module === "farley" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
   document.body.classList.toggle("theme-inventario", module === "inventario");
+  document.body.classList.toggle("theme-farley", module === "farley");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -86,6 +89,11 @@ function switchSection(section) {
     "inventario-estadisticas": "Estadisticas - Inventario",
     "inventario-descargar": "Descargar - Inventario",
     "consulta-buscar": "Consulta General",
+    "farley-resumen": "Resumen - B. DATOS FARLEY",
+    "farley-miembros": "Miembros - B. DATOS FARLEY",
+    "farley-promociones": "Promociones - B. DATOS FARLEY",
+    "farley-graficos": "Gr&aacute;ficos - B. DATOS FARLEY",
+    "farley-detalle": "Detalle - B. DATOS FARLEY",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -104,6 +112,11 @@ function loadSection(section) {
   if (section === "inventario-registros") loadInventarioRegistros();
   if (section === "inventario-estadisticas") loadInventarioStats();
   if (section === "consulta-buscar") loadConsulta();
+  if (section === "farley-resumen") loadFarleyResumen();
+  if (section === "farley-miembros") loadFarleyMiembros();
+  if (section === "farley-promociones") loadFarleyPromociones();
+  if (section === "farley-graficos") loadFarleyGraficos();
+  if (section === "farley-detalle") loadFarleyDetalle();
 }
 
 function startAutoRefresh() {
@@ -1550,6 +1563,30 @@ function renderConsulta(data) {
       sourcesHtml += buildConsultaSourceHtml("pagos", "payments", "Pagos", [], pagosExtra);
     }
 
+    // FARLEY (CRM) section
+    if (p.farley && p.farley.exists) {
+      let farleyExtra = '<div class="consulta-field"><span class="consulta-field-label">Compras:</span> ' + p.farley.purchase_count + '</div>';
+      farleyExtra += '<div class="consulta-field"><span class="consulta-field-label">Total gastado:</span> <strong>$' + (p.farley.total_spent || 0).toLocaleString() + '</strong></div>';
+      if (p.farley.categories && p.farley.categories.length > 0) {
+        farleyExtra += '<div class="consulta-field"><span class="consulta-field-label">Categorías:</span> ' + p.farley.categories.map(function(t) { return '<span class="tag tag-' + t + '">' + t + '</span>'; }).join(' ') + '</div>';
+      }
+      const purchases = p.farley.purchases || [];
+      if (purchases.length > 0) {
+        farleyExtra += '<div class="consulta-pagos-mini"><table class="consulta-pagos-table"><thead><tr><th>Fecha</th><th>Promoción</th><th>Valor</th></tr></thead><tbody>';
+        for (const pu of purchases) {
+          farleyExtra += '<tr><td>' + (pu.date || '-') + '</td><td>' + (pu.flayer || '-') + '</td><td class="valor-cell">' + (pu.amount ? '$' + pu.amount.toLocaleString() : '-') + '</td></tr>';
+        }
+        farleyExtra += '</tbody></table></div>';
+      }
+      sourcesHtml += buildConsultaSourceHtml("farley", "assignment", "B. DATOS - FARLEY", [
+        { label: "Nombre", val: p.farley.name },
+        { label: "Cédula", val: p.farley.cedula },
+        { label: "Email", val: p.farley.email },
+        { label: "Teléfono", val: p.farley.phone },
+        { label: "Ubicación", val: [p.farley.city, p.farley.department, p.farley.country].filter(Boolean).join(', ') },
+      ], farleyExtra);
+    }
+
     html += '<div class="consulta-result-card">';
     html += '<div class="consulta-person-header">';
     html += '<span class="material-icons consulta-person-icon">person</span>';
@@ -1599,4 +1636,474 @@ function toggleConsultaSource(headerEl) {
     body.style.display = "none";
     arrow.textContent = "expand_more";
   }
+}
+
+
+// ========== FARLEY (CRM) FUNCTIONS ==========
+
+let crmData = null;
+let crmMembersSort = { key: 'purchase_count', dir: -1 };
+let crmMembersPage = 0;
+const CRM_PAGE_SIZE = 25;
+let crmActiveTags = new Set();
+let crmSelectedMemberIdx = 0;
+let crmDetalleSearch = '';
+
+function initFarleySearch() {
+  document.getElementById("farleySearchInput").addEventListener("input", function() {
+    loadFarleyMiembros();
+  });
+}
+
+async function _ensureCrmData() {
+  if (crmData) return;
+  try {
+    const resp = await fetch("/api/crm/data");
+    if (!resp.ok) throw new Error("Error al cargar CRM");
+    crmData = await resp.json();
+  } catch (err) {
+    crmData = { summary: { total_members: 0, total_purchases: 0, total_collected: 0, category_totals: {}, flayers: [] }, members: [] };
+  }
+}
+
+// ========== RESUMEN ==========
+
+async function loadFarleyResumen() {
+  const el = document.getElementById("farleyResumenContent");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando resumen...</p></div>';
+  await _ensureCrmData();
+  const s = crmData.summary;
+  const m = crmData.members;
+  const topBuyers = [...m].sort(function(a, b) { return b.purchase_count - a.purchase_count; }).slice(0, 10);
+  const catNames = { dinar: "Dinares", gold: "Oro", membership: "Membresías", vaquita: "Vaquita", bonus: "Bonos", card: "Tarjetas", other: "Otros" };
+
+  let html = '<div class="stats-grid">';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + s.total_members + '</span><span class="stat-label">Miembros</span></div></div>';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">receipt_long</span><div class="stat-info"><span class="stat-value">' + s.total_purchases + '</span><span class="stat-label">Compras Totales</span></div></div>';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">payments</span><div class="stat-info"><span class="stat-value">' + formatCOP(s.total_collected) + '</span><span class="stat-label">Total Recaudado</span></div></div>';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">local_offer</span><div class="stat-info"><span class="stat-value">' + s.flayers.length + '</span><span class="stat-label">Tipos de Promoción</span></div></div>';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">bar_chart</span><div class="stat-info"><span class="stat-value">' + (s.total_purchases / s.total_members).toFixed(1) + '</span><span class="stat-label">Promedio x Miembro</span></div></div>';
+  html += '<div class="stat-card"><span class="material-icons stat-icon">credit_card</span><div class="stat-info"><span class="stat-value">NEQUI</span><span class="stat-label">Pago Principal</span></div></div>';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:16px;margin-top:20px">';
+  html += '<div class="stat-card"><div class="stat-info"><span class="stat-label" style="font-size:14px;font-weight:600;color:#212121">🏆 Top Compradores</span></div><div class="table-wrapper" style="margin-top:8px"><table class="data-table" style="font-size:12px"><thead><tr><th>#</th><th>Nombre</th><th style="text-align:right">Compras</th><th style="text-align:right">Total</th></tr></thead><tbody>';
+  for (let i = 0; i < topBuyers.length; i++) {
+    const b = topBuyers[i];
+    html += '<tr><td>' + (i + 1) + '</td><td>' + b.name + '</td><td class="text-right">' + b.purchase_count + '</td><td class="text-right">' + formatCOP(b.total_spent || 0) + '</td></tr>';
+  }
+  html += '</tbody></table></div></div>';
+
+  const catEntries = Object.entries(s.category_totals).sort(function(a, b) { return b[1] - a[1]; });
+  html += '<div class="stat-card"><div class="stat-info"><span class="stat-label" style="font-size:14px;font-weight:600;color:#212121">🏷️ Compras por Categoría</span></div><div class="table-wrapper" style="margin-top:8px"><table class="data-table" style="font-size:12px"><thead><tr><th>Categoría</th><th style="text-align:right">Compras</th></tr></thead><tbody>';
+  for (const [k, v] of catEntries) {
+    html += '<tr><td><span class="tag tag-' + k + '">' + (catNames[k] || k) + '</span></td><td class="text-right">' + v + '</td></tr>';
+  }
+  html += '</tbody></table></div></div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+  updateRefreshIndicator(false);
+}
+
+// ========== MIEMBROS ==========
+
+async function loadFarleyMiembros() {
+  const tbody = document.getElementById("farleyTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando miembros...</p></div></td></tr>';
+
+  await _ensureCrmData();
+  const search = document.getElementById("farleySearchInput").value.toLowerCase();
+  let members = crmData.members;
+
+  if (search) {
+    members = members.filter(function(m) {
+      return (m.name && m.name.toLowerCase().includes(search)) ||
+             (m.cedula && m.cedula.toLowerCase().includes(search)) ||
+             (m.email && m.email.toLowerCase().includes(search)) ||
+             (m.phone && m.phone.toLowerCase().includes(search));
+    });
+  }
+
+  members.sort(function(a, b) {
+    let va = a[crmMembersSort.key], vb = b[crmMembersSort.key];
+    if (typeof va === "string") va = va.toLowerCase();
+    if (typeof vb === "string") vb = vb.toLowerCase();
+    if (va < vb) return -1 * crmMembersSort.dir;
+    if (va > vb) return 1 * crmMembersSort.dir;
+    return 0;
+  });
+
+  const totalPages = Math.ceil(members.length / CRM_PAGE_SIZE);
+  if (crmMembersPage >= totalPages) crmMembersPage = totalPages - 1;
+  if (crmMembersPage < 0) crmMembersPage = 0;
+  const start = crmMembersPage * CRM_PAGE_SIZE;
+  const page = members.slice(start, start + CRM_PAGE_SIZE);
+
+  document.getElementById("farleyTableCount").textContent = members.length + " miembro" + (members.length !== 1 ? "s" : "");
+
+  if (page.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + (search ? "No se encontraron miembros." : "No hay miembros registrados.") + '</p></div></td></tr>';
+    document.getElementById("farleyPagination").innerHTML = "";
+    updateRefreshIndicator(false);
+    return;
+  }
+
+  tbody.innerHTML = page.map(function(m) {
+    return '<tr><td style="font-weight:500">' + (m.name || "—") + '</td><td style="color:#9E9E9E">' + (m.cedula || "—") + '</td><td style="color:#9E9E9E;font-size:12px">' + (m.email || "—") + '</td><td style="color:#9E9E9E;font-size:12px">' + (m.phone || "—") + '</td><td style="color:#9E9E9E;font-size:12px">' + [m.city, m.department, m.country].filter(Boolean).join(", ") + '</td><td class="text-right">' + m.purchase_count + '</td><td class="text-right">' + formatCOP(m.total_spent || 0) + '</td></tr>';
+  }).join("");
+
+  let pagHtml = '<div class="pagination">';
+  pagHtml += '<button onclick="crmMembersPage=0;loadFarleyMiembros()"' + (crmMembersPage === 0 ? ' disabled' : '') + '>««</button>';
+  pagHtml += '<button onclick="crmMembersPage=Math.max(0,crmMembersPage-1);loadFarleyMiembros()"' + (crmMembersPage === 0 ? ' disabled' : '') + '>«</button>';
+  pagHtml += '<span style="padding:6px 12px;font-size:12px;color:#9E9E9E">Página ' + (crmMembersPage + 1) + ' de ' + totalPages + '</span>';
+  pagHtml += '<button onclick="crmMembersPage=Math.min(' + (totalPages - 1) + ',crmMembersPage+1);loadFarleyMiembros()"' + (crmMembersPage >= totalPages - 1 ? ' disabled' : '') + '>»</button>';
+  pagHtml += '<button onclick="crmMembersPage=' + (totalPages - 1) + ';loadFarleyMiembros()"' + (crmMembersPage >= totalPages - 1 ? ' disabled' : '') + '>»»</button>';
+  pagHtml += '</div>';
+  document.getElementById("farleyPagination").innerHTML = pagHtml;
+  updateRefreshIndicator(false);
+}
+
+function farleySortKey(k) {
+  if (crmMembersSort.key === k) crmMembersSort.dir *= -1;
+  else { crmMembersSort.key = k; crmMembersSort.dir = -1; }
+  loadFarleyMiembros();
+}
+
+// ========== PROMOCIONES ==========
+
+async function loadFarleyPromociones() {
+  const el = document.getElementById("farleyPromocionesContent");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando promociones...</p></div>';
+  await _ensureCrmData();
+
+  const flayers = crmData.summary.flayers;
+  const s = crmData.summary;
+  const catNames = { dinar: "Dinares", gold: "Oro", membership: "Membresías", vaquita: "Vaquita (Comp. Compartida)", bonus: "Bonos", card: "Tarjetas", other: "Otros" };
+  const allTags = ["dinar", "gold", "membership", "vaquita", "bonus", "card", "other"];
+  const isAll = crmActiveTags.size === 0;
+
+  const filtered = flayers.filter(function(f) {
+    if (isAll) return true;
+    return f.tags.some(function(t) { return crmActiveTags.has(t); });
+  });
+
+  const groups = {};
+  for (const t of allTags) groups[t] = [];
+  for (const f of filtered) {
+    for (const t of f.tags) {
+      if (groups[t]) groups[t].push(f);
+    }
+  }
+
+  let tagOrder = allTags.filter(function(t) {
+    return !isAll ? crmActiveTags.has(t) : groups[t].length > 0;
+  });
+
+  let html = '<div class="filter-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;align-items:center">';
+  html += '<span class="filter-label" style="font-size:12px;color:#9E9E9E;margin-right:8px">Filtrar por categoría:</span>';
+  html += '<button class="filter-btn' + (isAll ? ' active' : '') + '" data-tag="all" style="padding:6px 16px;border-radius:20px;border:1px solid #E0E0E0;background:' + (isAll ? 'var(--clr-primary)' : '#FFFFFF') + ';color:' + (isAll ? '#212121' : '#9E9E9E') + ';cursor:pointer;font-size:12px;font-weight:500">Todas (' + s.total_purchases + ')</button>';
+  for (const t of allTags) {
+    const isActive = crmActiveTags.has(t);
+    html += '<button class="filter-btn' + (isActive ? ' active' : '') + '" data-tag="' + t + '" onclick="farleyToggleTag(\'' + t + '\')" style="padding:6px 16px;border-radius:20px;border:1px solid #E0E0E0;background:' + (isActive ? 'var(--clr-primary)' : '#FFFFFF') + ';color:' + (isActive ? '#212121' : '#9E9E9E') + ';cursor:pointer;font-size:12px;font-weight:500"><span class="tag tag-' + t + '">' + catNames[t] + '</span> (' + (s.category_totals[t] || 0) + ')</button>';
+  }
+  html += '</div>';
+  html += '<div style="margin-bottom:16px;font-size:12px;color:#9E9E9E">';
+  html += isAll ? 'Mostrando todos los ' + flayers.length + ' tipos de promoción' : 'Mostrando ' + filtered.length + ' promociones con las etiquetas seleccionadas';
+  html += '</div>';
+
+  for (const tag of tagOrder) {
+    const items = groups[tag];
+    if (!items || items.length === 0) continue;
+    const totalDinar = items.reduce(function(s, f) { return s + f.dinar_qty; }, 0);
+    const totalGold = items.reduce(function(s, f) { return s + f.gold_qty; }, 0);
+    const allGrams = [...new Set(items.flatMap(function(f) { return f.gold_grams || []; }))].sort(function(a, b) { return a - b; });
+    const gramStr = allGrams.length ? allGrams.map(function(g) { return g + "GR"; }).join("/") : "";
+    const totalMemb = items.reduce(function(s, f) { return s + f.membership_qty; }, 0);
+    const totalCard = items.reduce(function(s, f) { return s + f.card_qty; }, 0);
+    const totalPurchases = items.reduce(function(s, f) { return s + f.count; }, 0);
+    const totalAmount = items.reduce(function(s, f) { return s + f.total_amount; }, 0);
+
+    html += '<div class="flayer-group" style="margin-bottom:16px;background:#FFFFFF;border:1px solid #E0E0E0;border-radius:10px;overflow:hidden">';
+    html += '<div class="flayer-group-header" onclick="farleyToggleGroup(this)" style="padding:14px 18px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-weight:600;transition:.2s">';
+    html += '<span><span class="tag tag-' + tag + '">' + catNames[tag] + '</span> <strong>' + items.length + '</strong> promociones · <strong>' + totalPurchases + '</strong> compras</span>';
+    html += '<span style="display:flex;gap:14px;align-items:center;font-size:12px">';
+    if (totalDinar > 0) html += '<span style="color:#c4956a">📦 ' + totalDinar.toLocaleString() + ' dinares</span>';
+    if (totalGold > 0) html += '<span style="color:#d4a017">🥇 ' + totalGold.toLocaleString() + (gramStr ? ' (' + gramStr + ')' : '') + '</span>';
+    if (totalMemb > 0) html += '<span style="color:#5a8ec4">🎫 ' + totalMemb + ' membresías</span>';
+    if (totalCard > 0) html += '<span style="color:#5a9a6a">💳 ' + totalCard + ' tarjetas</span>';
+    html += '<span style="color:#9E9E9E">' + formatCOP(totalAmount) + '</span>';
+    html += '<span class="count-badge" style="background:var(--clr-primary);color:#212121;padding:2px 12px;border-radius:20px;font-size:12px">' + items.length + '</span>';
+    html += '</span></div>';
+    html += '<div class="flayer-group-body" style="display:none;border-top:1px solid #E0E0E0">';
+
+    items.sort(function(a, b) { return b.count - a.count; });
+    for (const f of items) {
+      const fGramStr = f.gold_grams && f.gold_grams.length ? f.gold_grams.map(function(g) { return g + "GR"; }).join("/") : "";
+      html += '<div class="flayer-row" style="padding:10px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-bottom:1px solid #F5F5F5">';
+      html += '<div class="name" style="flex:1;min-width:200px;font-size:13px">' + f.name + ' <span style="color:#9E9E9E;font-size:11px">×' + f.count + '</span></div>';
+      html += '<div class="stats" style="display:flex;gap:16px;font-size:12px">';
+      if (f.dinar_qty > 0) html += '<span style="color:#c4956a">📦 ' + f.dinar_qty + ' dinares</span>';
+      if (f.gold_qty > 0) html += '<span style="color:#d4a017">🥇 ' + f.gold_qty + (fGramStr ? ' (' + fGramStr + ')' : '') + '</span>';
+      if (f.membership_qty > 0) html += '<span style="color:#5a8ec4">🎫 ' + f.membership_qty + '</span>';
+      if (f.card_qty > 0) html += '<span style="color:#5a9a6a">💳 ' + f.card_qty + '</span>';
+      html += '<span style="color:#9E9E9E">' + formatCOP(f.total_amount || 0) + '</span>';
+      const otherTags = f.tags.filter(function(t) { return t !== tag; });
+      for (const ot of otherTags) {
+        html += '<span class="tag tag-' + ot + '" style="font-size:10px">' + ot + '</span>';
+      }
+      html += '</div>';
+      if (f.benefit_samples && f.benefit_samples.length) {
+        html += '<div style="font-size:11px;color:#9E9E9E;margin-top:4px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Ej: ' + f.benefit_samples[0] + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  if (filtered.length === 0) {
+    html += '<div class="empty-state" style="padding:40px;text-align:center;color:#9E9E9E;font-size:14px">No hay promociones con los filtros seleccionados</div>';
+  }
+
+  el.innerHTML = html;
+  updateRefreshIndicator(false);
+}
+
+function farleyToggleTag(tag) {
+  if (tag === "all") {
+    crmActiveTags.clear();
+  } else {
+    if (crmActiveTags.has(tag)) crmActiveTags.delete(tag);
+    else crmActiveTags.add(tag);
+  }
+  loadFarleyPromociones();
+}
+
+function farleyToggleGroup(headerEl) {
+  const body = headerEl.nextElementSibling;
+  body.style.display = body.style.display === "block" ? "none" : "block";
+}
+
+// ========== GRÁFICOS ==========
+
+async function loadFarleyGraficos() {
+  const el = document.getElementById("farleyGraficosContent");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando gráficos...</p></div>';
+  await _ensureCrmData();
+
+  const s = crmData.summary;
+  const members = crmData.members;
+
+  // Payment methods
+  let payCounts = {};
+  let yearCounts = {};
+  for (const m of members) {
+    for (const p of m.purchases) {
+      const pm = p.payment || "Otro";
+      payCounts[pm] = (payCounts[pm] || 0) + 1;
+      const yr = p.year || 0;
+      yearCounts[yr] = (yearCounts[yr] || 0) + 1;
+    }
+  }
+
+  let paySorted = Object.entries(payCounts).sort(function(a, b) { return b[1] - a[1]; });
+
+  // Top 10 members
+  let topMembers = [...members].sort(function(a, b) { return b.purchase_count - a.purchase_count; }).slice(0, 10);
+
+  // Top 10 flayers
+  let topFlayers = [...s.flayers].sort(function(a, b) { return b.count - a.count; }).slice(0, 10);
+
+  // Category totals
+  let catEntries = Object.entries(s.category_totals).sort(function(a, b) { return b[1] - a[1]; });
+
+  // Distribution
+  let dist = {};
+  for (const m of members) {
+    const c = m.purchase_count;
+    dist[c] = (dist[c] || 0) + 1;
+  }
+  let distKeys = Object.keys(dist).sort(function(a, b) { return parseInt(a) - parseInt(b); });
+
+  // Timeline
+  let monthCounts = {};
+  for (const m of members) {
+    for (const p of m.purchases) {
+      if (p.date) {
+        const month = p.date.slice(0, 7);
+        monthCounts[month] = (monthCounts[month] || 0) + 1;
+      }
+    }
+  }
+  let monthLabels = Object.keys(monthCounts).sort();
+  const maxMonth = monthLabels.length > 0 ? Math.max.apply(Math, monthLabels.map(function(m) { return monthCounts[m]; })) : 1;
+
+  let html = '';
+
+  // Category chart
+  html += '<h3 class="section-subtitle">Compras por Categoría</h3>';
+  html += '<div class="bar-chart">';
+  const maxCat = catEntries.length > 0 ? catEntries[0][1] : 1;
+  for (const [k, v] of catEntries) {
+    const pct = Math.round(v / maxCat * 100);
+    html += '<div class="bar-item"><span class="bar-label">' + k + '</span><div class="bar-track"><div class="bar-fill bar-fill-cop" style="width:' + pct + '%"></div></div><span class="bar-value">' + v + '</span></div>';
+  }
+  html += '</div>';
+
+  // Top 10 members
+  html += '<h3 class="section-subtitle" style="margin-top:32px">Top 10 Miembros por Compras</h3>';
+  html += '<div class="bar-chart">';
+  const maxTop = topMembers.length > 0 ? topMembers[0].purchase_count : 1;
+  for (const m of topMembers) {
+    const pct = Math.round(m.purchase_count / maxTop * 100);
+    html += '<div class="bar-item"><span class="bar-label">' + m.name + '</span><div class="bar-track"><div class="bar-fill bar-fill-people" style="width:' + pct + '%"></div></div><span class="bar-value">' + m.purchase_count + '</span></div>';
+  }
+  html += '</div>';
+
+  // Top 10 flayers
+  html += '<h3 class="section-subtitle" style="margin-top:32px">Top 10 Promociones más Vendidas</h3>';
+  html += '<div class="bar-chart">';
+  const maxFl = topFlayers.length > 0 ? topFlayers[0].count : 1;
+  for (const f of topFlayers) {
+    const pct = Math.round(f.count / maxFl * 100);
+    html += '<div class="bar-item"><span class="bar-label" style="font-size:11px">' + f.name + '</span><div class="bar-track"><div class="bar-fill bar-fill-dia" style="width:' + pct + '%"></div></div><span class="bar-value">' + f.count + '</span></div>';
+  }
+  html += '</div>';
+
+  // Payment methods
+  html += '<h3 class="section-subtitle" style="margin-top:32px">Método de Pago</h3>';
+  html += '<div class="bar-chart">';
+  const maxPay = paySorted.length > 0 ? paySorted[0][1] : 1;
+  for (const [pm, cnt] of paySorted) {
+    const pct = Math.round(cnt / maxPay * 100);
+    html += '<div class="bar-item"><span class="bar-label">' + pm + '</span><div class="bar-track"><div class="bar-fill bar-fill-cop" style="width:' + pct + '%"></div></div><span class="bar-value">' + cnt + '</span></div>';
+  }
+  html += '</div>';
+
+  // Distribution
+  html += '<h3 class="section-subtitle" style="margin-top:32px">Distribución de Compras por Miembro</h3>';
+  html += '<div class="bar-chart">';
+  const maxDist = Math.max.apply(Math, distKeys.map(function(k) { return dist[k]; }));
+  for (const k of distKeys) {
+    const pct = Math.round(dist[k] / maxDist * 100);
+    html += '<div class="bar-item"><span class="bar-label">' + k + ' compras</span><div class="bar-track"><div class="bar-fill bar-fill-people" style="width:' + pct + '%"></div></div><span class="bar-value">' + dist[k] + ' miembros</span></div>';
+  }
+  html += '</div>';
+
+  // Timeline
+  html += '<h3 class="section-subtitle" style="margin-top:32px">Compras en el Tiempo</h3>';
+  html += '<div class="bar-chart">';
+  for (const m of monthLabels) {
+    const pct = Math.round(monthCounts[m] / maxMonth * 100);
+    html += '<div class="bar-item"><span class="bar-label bar-label-date">' + m + '</span><div class="bar-track"><div class="bar-fill bar-fill-dia" style="width:' + pct + '%"></div></div><span class="bar-value">' + monthCounts[m] + '</span></div>';
+  }
+  html += '</div>';
+
+  el.innerHTML = html;
+  updateRefreshIndicator(false);
+}
+
+// ========== DETALLE ==========
+
+async function loadFarleyDetalle() {
+  const el = document.getElementById("farleyDetalleContent");
+  await _ensureCrmData();
+
+  const members = crmData.members;
+  const q = crmDetalleSearch.toLowerCase();
+  const filtered = q ? members.filter(function(m) {
+    return (m.name && m.name.toLowerCase().includes(q)) || (m.cedula && m.cedula.toLowerCase().includes(q));
+  }) : members;
+
+  let opts = '<option value="">' + (filtered.length === members.length ? "Seleccione un miembro..." : filtered.length + " resultados — seleccione...") + '</option>';
+  for (let i = 0; i < filtered.length; i++) {
+    const m = filtered[i];
+    const realIdx = members.indexOf(m);
+    const sel = realIdx === crmSelectedMemberIdx ? "selected" : "";
+    opts += '<option value="' + realIdx + '" ' + sel + '>' + m.name + ' — ' + m.purchase_count + ' compras — ' + formatCOP(m.total_spent || 0) + '</option>';
+  }
+
+  let html = '';
+  html += '<div class="consulta-search-wrapper" style="margin-bottom:16px">';
+  html += '<span class="material-icons consulta-search-icon">search</span>';
+  html += '<input type="text" id="farleyDetalleSearchInput" class="consulta-search-input" placeholder="Buscar por nombre o cédula..." value="' + crmDetalleSearch + '">';
+  html += '</div>';
+  html += '<select id="farleyDetalleSelect" onchange="farleyChangeMember(this.value)" style="width:100%;max-width:500px;padding:10px 14px;border:1px solid #E0E0E0;border-radius:8px;font-size:13px;margin-bottom:16px;font-family:inherit">' + opts + '</select>';
+  html += '<div id="farleyDetalleContentInner"></div>';
+
+  el.innerHTML = html;
+
+  document.getElementById("farleyDetalleSearchInput").addEventListener("input", function() {
+    crmDetalleSearch = this.value;
+    loadFarleyDetalle();
+  });
+
+  if (crmSelectedMemberIdx >= 0 && members[crmSelectedMemberIdx]) {
+    farleyShowMemberDetail(members[crmSelectedMemberIdx]);
+  }
+}
+
+function farleyChangeMember(val) {
+  if (val === "") {
+    document.getElementById("farleyDetalleContentInner").innerHTML = "";
+    return;
+  }
+  crmSelectedMemberIdx = parseInt(val);
+  farleyShowMemberDetail(crmData.members[crmSelectedMemberIdx]);
+}
+
+function farleyShowMemberDetail(member) {
+  const tagsList = [...new Set(member.purchases.flatMap(function(p) { return p.tags; }))];
+  const totalDinar = member.purchases.reduce(function(s, p) { return s + p.dinar_qty; }, 0);
+  const totalGold = member.purchases.reduce(function(s, p) { return s + p.gold_qty; }, 0);
+  const totalMemb = member.purchases.reduce(function(s, p) { return s + p.membership_qty; }, 0);
+  const totalCard = member.purchases.reduce(function(s, p) { return s + p.card_qty; }, 0);
+
+  let html = '<div class="ayudas-detail-card">';
+  html += '<div class="ayudas-detail-section">';
+  html += '<div class="ayudas-detail-title"><span class="material-icons">person</span> ' + member.name + '</div>';
+  html += '<div class="ayudas-detail-grid">';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Cédula:</span><span class="ayudas-detail-value">' + (member.cedula || "—") + '</span></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Email:</span><span class="ayudas-detail-value">' + (member.email || "—") + '</span></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Teléfono:</span><span class="ayudas-detail-value">' + (member.phone || "—") + '</span></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">send</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">' + (member.telegram || "—") + '</span></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Ubicación:</span><span class="ayudas-detail-value">' + [member.city, member.department, member.country].filter(Boolean).join(", ") + '</span></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">cake</span><span class="ayudas-detail-label">Nacimiento:</span><span class="ayudas-detail-value">' + (member.birthdate || "—") + '</span></div>';
+  html += '</div></div>';
+
+  html += '<div class="ayudas-detail-section">';
+  html += '<div style="margin-bottom:12px"><strong style="font-size:14px">' + member.purchase_count + ' compras</strong>';
+  html += '<span style="color:#9E9E9E;margin-left:12px">Total: ' + formatCOP(member.total_spent || 0) + '</span>';
+  html += '<span style="margin-left:12px">' + tagsList.map(function(t) { return '<span class="tag tag-' + t + '">' + t + '</span>'; }).join(" ") + '</span></div>';
+
+  if (totalDinar > 0 || totalGold > 0 || totalMemb > 0 || totalCard > 0) {
+    html += '<div style="display:flex;gap:16px;font-size:13px;margin-bottom:14px;flex-wrap:wrap">';
+    if (totalDinar > 0) html += '<span style="color:#c4956a">📦 Total dinares recibidos: <strong>' + totalDinar + '</strong></span>';
+    if (totalGold > 0) html += '<span style="color:#d4a017">🥇 Total gold recibidos: <strong>' + totalGold + '</strong></span>';
+    if (totalMemb > 0) html += '<span style="color:#5a8ec4">🎫 Total membresías: <strong>' + totalMemb + '</strong></span>';
+    if (totalCard > 0) html += '<span style="color:#5a9a6a">💳 Total tarjetas: <strong>' + totalCard + '</strong></span>';
+    html += '</div>';
+  }
+
+  const purchases = member.purchases || [];
+  if (purchases.length > 0) {
+    html += '<div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Fecha</th><th>Promoción</th><th>Beneficio</th><th class="text-right">Monto</th><th>Pago</th><th>Tags</th><th>Líder</th></tr></thead><tbody>';
+    for (let i = 0; i < purchases.length; i++) {
+      const p = purchases[i];
+      const gGram = p.gold_grams ? " " + p.gold_grams + "GR" : "";
+      const tagHtml = p.tags.map(function(t) {
+        return t === "gold" && gGram ? '<span class="tag tag-' + t + '">' + t + gGram + "</span>" : '<span class="tag tag-' + t + '">' + t + "</span>";
+      }).join(" ");
+      const benefitText = p.benefit_text ? p.benefit_text.slice(0, 80) + (p.benefit_text.length > 80 ? "..." : "") : "—";
+      html += '<tr><td>' + (i + 1) + '</td><td style="white-space:nowrap">' + (p.date || "—") + '</td><td style="max-width:220px">' + (p.flayer || "—") + '</td><td style="max-width:260px;font-size:12px;color:#9E9E9E">' + benefitText + '</td><td class="text-right">' + (p.amount ? formatCOP(p.amount) : "—") + '</td><td>' + (p.payment || "—") + '</td><td>' + tagHtml + '</td><td style="color:#9E9E9E;font-size:12px">' + (p.leader || "—") + '</td></tr>';
+    }
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div class="empty-state" style="padding:20px;text-align:center;color:#9E9E9E">No tiene compras registradas.</div>';
+  }
+
+  html += '<div class="ayudas-detail-section ayudas-detail-section-meta">';
+  html += '</div></div>';
+
+  document.getElementById("farleyDetalleContentInner").innerHTML = html;
 }

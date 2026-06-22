@@ -19,6 +19,7 @@
           <option value="ayudas">BOT - AYUDAS H.</option>
           <option value="inventario">BOT - INVENTARIO</option>
           <option value="consulta">CONSULTA GENERAL</option>
+          <option value="farley">B. DATOS - FARLEY</option>
         </select>
       </div>
     </div>
@@ -94,6 +95,28 @@
       <button class="nav-btn active" data-section="consulta-buscar">
         <span class="material-icons">search</span>
         <span>Buscar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-farley" style="display:none">
+      <button class="nav-btn active" data-section="farley-resumen">
+        <span class="material-icons">dashboard</span>
+        <span>Resumen</span>
+      </button>
+      <button class="nav-btn" data-section="farley-miembros">
+        <span class="material-icons">people</span>
+        <span>Miembros</span>
+      </button>
+      <button class="nav-btn" data-section="farley-promociones">
+        <span class="material-icons">local_offer</span>
+        <span>Promociones</span>
+      </button>
+      <button class="nav-btn" data-section="farley-graficos">
+        <span class="material-icons">bar_chart</span>
+        <span>Gr&aacute;ficos</span>
+      </button>
+      <button class="nav-btn" data-section="farley-detalle">
+        <span class="material-icons">search</span>
+        <span>Detalle</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -534,6 +557,84 @@
         <span>Ingresa al menos 2 caracteres para buscar en BOT principal, Ayudas Humanitarias, Inventario y Pagos.</span>
       </div>
       <div id="consultaResults" class="consulta-results"></div>
+    </section>
+
+    <!-- ========== FARLEY (CRM) SECTIONS ========== -->
+
+    <section class="content-section" id="section-farley-resumen">
+      <div id="farleyResumenContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando resumen...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-farley-miembros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Todos los miembros registrados en la base de datos de Farley. Busca, ordena y navega por la lista.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="farleySearchInput" placeholder="Buscar por nombre, c&eacute;dula, email..." class="search-input">
+        </div>
+        <span class="table-count" id="farleyTableCount">0 miembros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="farleyTable">
+          <thead>
+            <tr>
+              <th style="cursor:pointer" onclick="farleySortKey('name')">Nombre</th>
+              <th style="cursor:pointer" onclick="farleySortKey('cedula')">C&eacute;dula</th>
+              <th style="cursor:pointer" onclick="farleySortKey('email')">Email</th>
+              <th style="cursor:pointer" onclick="farleySortKey('phone')">Tel&eacute;fono</th>
+              <th style="cursor:pointer" onclick="farleySortKey('department')">Ubicaci&oacute;n</th>
+              <th style="cursor:pointer;text-align:right" onclick="farleySortKey('purchase_count')">Compras</th>
+              <th style="cursor:pointer;text-align:right" onclick="farleySortKey('total_spent')">Total $</th>
+            </tr>
+          </thead>
+          <tbody id="farleyTableBody">
+            <tr class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando miembros...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="farleyPagination"></div>
+    </section>
+
+    <section class="content-section" id="section-farley-promociones">
+      <div id="farleyPromocionesContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando promociones...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-farley-graficos">
+      <div id="farleyGraficosContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando gr&aacute;ficos...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-farley-detalle">
+      <div id="farleyDetalleContent">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando detalle...</p>
+        </div>
+      </div>
     </section>
 
     <!-- ========== INVENTARIO MODALS ========== -->

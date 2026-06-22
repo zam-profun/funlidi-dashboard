@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import re
 import time
 import difflib
@@ -28,6 +29,7 @@ COL_TZ = timezone(timedelta(hours=-5))
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_to_show")
 _PAGOS_CACHE = {"data": None, "mtime": 0}
+_CRM_CACHE = {"data": None, "mtime": 0}
 
 PAGOS_FILES = [
     "EXCEL ACTIVACION PAGOS MARIA ELVIRA SUS.xlsx",
@@ -88,6 +90,21 @@ def _load_pagos_data():
     _PAGOS_CACHE["data"] = records
     _PAGOS_CACHE["mtime"] = latest_mtime
     return records
+
+
+def _load_crm_data():
+    fpath = os.path.join(DATA_DIR, "dashboard-data.json")
+    if not os.path.exists(fpath):
+        return None
+    mtime = os.path.getmtime(fpath)
+    if _CRM_CACHE["data"] is not None and mtime <= _CRM_CACHE["mtime"]:
+        return _CRM_CACHE["data"]
+    with open(fpath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    _CRM_CACHE["data"] = data
+    _CRM_CACHE["mtime"] = mtime
+    return data
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_ayudas: Client = create_client(AYUDAS_SUPABASE_URL, AYUDAS_SUPABASE_KEY)
@@ -385,6 +402,14 @@ async def get_pagos_personas():
         for ident, d in sorted(personas.items(), key=lambda x: -x[1]["total_gastado"])
     ]
     return {"personas": persona_list, "total": len(persona_list)}
+
+
+@app.get("/api/crm/data")
+async def get_crm_data():
+    data = _load_crm_data()
+    if data is None:
+        raise HTTPException(status_code=404, detail="CRM data file not found")
+    return data
 
 
 def formatear_fecha_simple(valor):
@@ -1043,6 +1068,40 @@ async def get_consulta(q: str = ""):
                 })
                 p["pagos"] = pagos_data
             link_record(r, ["identificacion"], "pagos", extract_pagos)
+    except Exception:
+        pass
+
+    # --- 5. Buscar en CRM (B. DATOS - FARLEY) ---
+    try:
+        crm_data = _load_crm_data()
+        if crm_data and crm_data.get("members"):
+            for m in crm_data["members"]:
+                if not any(_match_q(m.get(f), q) for f in ["name", "cedula", "email", "telegram", "phone"]):
+                    continue
+                def extract_crm(p, rec):
+                    p["name"] = p["name"] or rec.get("name") or ""
+                    p["identifiers"]["dni"] = rec.get("cedula") or p["identifiers"].get("dni")
+                    p["identifiers"]["email"] = rec.get("email") or p["identifiers"].get("email")
+                    tags = set()
+                    for pu in rec.get("purchases", []):
+                        for t in pu.get("tags", []):
+                            tags.add(t)
+                    p["farley"] = {
+                        "exists": True,
+                        "name": rec.get("name"),
+                        "cedula": rec.get("cedula"),
+                        "email": rec.get("email"),
+                        "telegram": rec.get("telegram"),
+                        "phone": rec.get("phone"),
+                        "city": rec.get("city"),
+                        "department": rec.get("department"),
+                        "country": rec.get("country"),
+                        "purchase_count": rec.get("purchase_count", 0),
+                        "total_spent": rec.get("total_spent", 0),
+                        "categories": sorted(tags),
+                        "purchases": sorted(rec.get("purchases", []), key=lambda x: x.get("date", ""), reverse=True)[:10],
+                    }
+                link_record(m, ["cedula", "email"], "farley", extract_crm)
     except Exception:
         pass
 

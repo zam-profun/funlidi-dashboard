@@ -34,6 +34,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-farley {
+  --clr-primary: #9575CD;
+  --clr-primary-rgb: 149, 117, 205;
+  --clr-primary-hover: #7E57C2;
+  --clr-primary-dark: #673AB7;
+  --clr-bg-light: #EDE7F6;
+  --clr-bg-hover: #D1C4E9;
+  --clr-border: #D1C4E9;
+  --clr-header-border: #D1C4E9;
+  --clr-warning: #F57F17;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -1593,6 +1605,14 @@ body {
   color: #9575CD;
 }
 
+.consulta-source-farley .consulta-source-header {
+  border-left: 3px solid #9575CD;
+}
+
+.consulta-source-farley .consulta-source-icon {
+  color: #9575CD;
+}
+
 /* Material rows in inventario */
 .consulta-mat-row {
   display: flex;
@@ -1638,4 +1658,35 @@ body {
   padding: 6px 8px;
   border-bottom: 1px solid #F5F5F5;
   color: #424242;
+}
+
+/* ========== CRM (FARLEY) TAG STYLES ========== */
+
+.tag{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;margin:1px}
+.tag-dinar{background:#e0f5f0;color:#2a9d8f}
+.tag-gold{background:#fef3d5;color:#c4910a}
+.tag-membership{background:#e0edf8;color:#4a7eb4}
+.tag-vaquita{background:#eee8fc;color:#7a5fb4}
+.tag-bonus{background:#fce4ec;color:#c4657a}
+.tag-card{background:#e0f0e0;color:#4a8a5a}
+.tag-other{background:#e8e4de;color:#7a7568}
+
+.text-right{text-align:right}
+
+/* Pagination links for farley */
+#farleyPagination {
+  display:flex;justify-content:center;gap:6px;margin-top:16px;flex-wrap:wrap
+}
+
+#farleyPagination button {
+  background:#FFFFFF;border:1px solid #E0E0E0;color:#9E9E9E;
+  padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px
+}
+
+#farleyPagination button:hover {
+  background:#F5F5F5;color:#212121
+}
+
+#farleyPagination button:disabled {
+  opacity:0.4;cursor:default
 }
