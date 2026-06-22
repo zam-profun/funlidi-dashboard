@@ -9,7 +9,7 @@ from collections import defaultdict
 import openpyxl
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Body, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client, Client
@@ -794,3 +794,77 @@ async def download_inventario_xlsx():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ========== INVENTARIO CRUD ENDPOINTS ==========
+
+
+INVENTARIO_FIELDS = ["nombre", "dni", "pais", "cajamicro", "cajadinar", "per_aleman", "per_top", "per_dragon"]
+
+
+def _next_negative_id():
+    result = (
+        supabase_inventario.table(INVENTARIO_TABLE)
+        .select("telegram_user_id")
+        .lt("telegram_user_id", 0)
+        .order("telegram_user_id")
+        .execute()
+    )
+    existing = [r["telegram_user_id"] for r in (result.data or [])]
+    if not existing:
+        return -1
+    return min(existing) - 1
+
+
+@app.post("/api/inventario/add")
+async def add_inventario_entry(data: dict = Body(...)):
+    telegram_username = (data.get("telegram_username") or "").strip()
+    if not telegram_username:
+        telegram_username = "MANUAL"
+
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+
+    telegram_user_id = _next_negative_id()
+    now = datetime.now(timezone.utc).isoformat()
+
+    row = {
+        "telegram_user_id": telegram_user_id,
+        "telegram_username": telegram_username,
+        "created_at": now,
+        "updated_at": now,
+    }
+    for k in INVENTARIO_FIELDS:
+        v = data.get(k)
+        row[k] = str(v).strip() if v and str(v).strip() else None
+
+    supabase_inventario.table(INVENTARIO_TABLE).upsert(row, on_conflict="telegram_user_id").execute()
+    return {"success": True, "data": row}
+
+
+@app.put("/api/inventario/edit/{telegram_user_id}")
+async def edit_inventario_entry(telegram_user_id: int, data: dict = Body(...)):
+    row = {}
+    for k in INVENTARIO_FIELDS:
+        if k in data:
+            v = data[k]
+            row[k] = str(v).strip() if v and str(v).strip() else None
+
+    if "telegram_username" in data:
+        v = data["telegram_username"]
+        row["telegram_username"] = str(v).strip() if v and str(v).strip() else "MANUAL"
+
+    if not row:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    supabase_inventario.table(INVENTARIO_TABLE).update(row).eq("telegram_user_id", telegram_user_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/inventario/delete/{telegram_user_id}")
+async def delete_inventario_entry(telegram_user_id: int):
+    supabase_inventario.table(INVENTARIO_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
+    return {"success": True}

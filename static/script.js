@@ -1030,6 +1030,9 @@ function initInventarioSearch() {
   document.getElementById("inventarioSearchInput").addEventListener("input", renderInventarioTable);
   document.getElementById("inventarioPaisFilter").addEventListener("change", renderInventarioTable);
   document.getElementById("inventarioEstadoFilter").addEventListener("change", renderInventarioTable);
+  document.getElementById("btnInventarioAdd").addEventListener("click", () => {
+    openInventarioAddModal();
+  });
 }
 
 function initInventarioDownload() {
@@ -1154,6 +1157,14 @@ function buildInventarioDetailHtml(r) {
           <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
         </div>
       </div>
+      <div class="inventario-detail-actions">
+        <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openInventarioEditModal(${r.telegram_user_id})">
+          <span class="material-icons" style="font-size:16px">edit</span> Editar
+        </button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();openInventarioDeleteModal(${r.telegram_user_id})">
+          <span class="material-icons" style="font-size:16px">delete</span> Eliminar
+        </button>
+      </div>
     </div>`;
 }
 
@@ -1242,5 +1253,153 @@ async function loadInventarioStats() {
     updateRefreshIndicator(false);
   } catch (err) {
     el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}
+
+
+// ========== INVENTARIO CRUD FUNCTIONS ==========
+
+
+function openInventarioAddModal() {
+  document.getElementById("editTelegramUserId").value = "";
+  document.getElementById("inventarioModalTitle").textContent = "Añadir registro";
+  document.getElementById("invFormUsername").value = "";
+  document.getElementById("invFormNombre").value = "";
+  document.getElementById("invFormDni").value = "";
+  document.getElementById("invFormPais").value = "";
+  document.getElementById("invFormCajamicro").value = "";
+  document.getElementById("invFormCajadinar").value = "";
+  document.getElementById("invFormPerAleman").value = "";
+  document.getElementById("invFormPerTop").value = "";
+  document.getElementById("invFormPerDragon").value = "";
+  document.getElementById("btnInventarioModalSubmit").textContent = "Guardar";
+  document.getElementById("inventarioModalOverlay").style.display = "flex";
+}
+
+
+function openInventarioEditModal(telegramUserId) {
+  const r = inventarioAllData.find(function(item) { return item.telegram_user_id === telegramUserId; });
+  if (!r) return;
+
+  document.getElementById("editTelegramUserId").value = telegramUserId;
+  document.getElementById("inventarioModalTitle").textContent = "Editar registro";
+  document.getElementById("invFormUsername").value = r.telegram_username || "";
+  document.getElementById("invFormNombre").value = r.nombre || "";
+  document.getElementById("invFormDni").value = r.dni || "";
+  document.getElementById("invFormPais").value = r.pais || "";
+  document.getElementById("invFormCajamicro").value = r.cajamicro || "";
+  document.getElementById("invFormCajadinar").value = r.cajadinar || "";
+  document.getElementById("invFormPerAleman").value = r.per_aleman || "";
+  document.getElementById("invFormPerTop").value = r.per_top || "";
+  document.getElementById("invFormPerDragon").value = r.per_dragon || "";
+  document.getElementById("btnInventarioModalSubmit").textContent = "Actualizar";
+  document.getElementById("inventarioModalOverlay").style.display = "flex";
+}
+
+
+function closeInventarioModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("inventarioModalOverlay").style.display = "none";
+}
+
+
+function getInventarioFormData() {
+  return {
+    telegram_username: document.getElementById("invFormUsername").value.trim(),
+    nombre: document.getElementById("invFormNombre").value.trim(),
+    dni: document.getElementById("invFormDni").value.trim(),
+    pais: document.getElementById("invFormPais").value.trim(),
+    cajamicro: document.getElementById("invFormCajamicro").value.trim(),
+    cajadinar: document.getElementById("invFormCajadinar").value.trim(),
+    per_aleman: document.getElementById("invFormPerAleman").value.trim(),
+    per_top: document.getElementById("invFormPerTop").value.trim(),
+    per_dragon: document.getElementById("invFormPerDragon").value.trim(),
+  };
+}
+
+
+async function submitInventarioForm() {
+  const nombre = document.getElementById("invFormNombre").value.trim();
+  if (!nombre) {
+    alert("El campo Nombres y Apellidos es obligatorio.");
+    document.getElementById("invFormNombre").focus();
+    return;
+  }
+
+  const btn = document.getElementById("btnInventarioModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const editId = document.getElementById("editTelegramUserId").value;
+    const data = getInventarioFormData();
+    let url, method;
+
+    if (editId) {
+      url = "/api/inventario/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/inventario/add";
+      method = "POST";
+    }
+
+    const resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al guardar");
+    }
+
+    closeInventarioModal();
+    inventarioExpandedRow = null;
+    await loadInventarioRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = document.getElementById("editTelegramUserId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+
+function openInventarioDeleteModal(telegramUserId) {
+  document.getElementById("deleteTelegramUserId").value = telegramUserId;
+  document.getElementById("inventarioDeleteOverlay").style.display = "flex";
+}
+
+
+function closeInventarioDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("inventarioDeleteOverlay").style.display = "none";
+}
+
+
+async function executeInventarioDelete() {
+  const telegramUserId = document.getElementById("deleteTelegramUserId").value;
+  if (!telegramUserId) return;
+
+  const btn = document.querySelector("#inventarioDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+
+  try {
+    const resp = await fetch("/api/inventario/delete/" + telegramUserId, {
+      method: "DELETE",
+    });
+
+    if (!resp.ok) throw new Error("Error al eliminar");
+
+    closeInventarioDeleteModal();
+    inventarioExpandedRow = null;
+    await loadInventarioRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
   }
 }

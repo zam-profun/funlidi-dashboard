@@ -1079,6 +1079,265 @@ body {
   }
 }
 
+/* ========== INVENTARIO DETAIL ACTIONS ========== */
+.inventario-detail-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #F5F5F5;
+  background: #FAFAFA;
+}
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.btn-edit {
+  background: var(--clr-bg-light);
+  color: var(--clr-primary-dark);
+  border: 1px solid var(--clr-border);
+}
+
+.btn-edit:hover {
+  background: var(--clr-border);
+}
+
+.btn-delete {
+  background: #FFEBEE;
+  color: #D32F2F;
+  border: 1px solid #FFCDD2;
+}
+
+.btn-delete:hover {
+  background: #FFCDD2;
+}
+
+/* ========== ADD BUTTON ========== */
+.btn-add {
+  background: var(--clr-primary);
+  color: #212121;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-add:hover {
+  background: var(--clr-primary-hover);
+}
+
+.btn-add .material-icons {
+  font-size: 18px;
+}
+
+/* ========== MODALS ========== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal {
+  background: #FFFFFF;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalFadeIn 0.2s ease;
+}
+
+.modal-sm {
+  max-width: 400px;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 0;
+}
+
+.modal-header-icon {
+  font-size: 24px;
+  color: var(--clr-primary);
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #212121;
+  flex: 1;
+}
+
+.modal-close {
+  font-size: 22px;
+  color: #9E9E9E;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.modal-close:hover {
+  color: #424242;
+  background: #F5F5F5;
+}
+
+.modal-body {
+  padding: 20px 24px 24px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+  flex: 1;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #424242;
+  margin-bottom: 6px;
+}
+
+.form-label-hint {
+  font-weight: 400;
+  color: #9E9E9E;
+  font-size: 12px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #212121;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 2px rgba(var(--clr-primary-rgb), 0.2);
+}
+
+.form-input::placeholder {
+  color: #BDBDBD;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn-primary {
+  background: var(--clr-primary);
+  color: #212121;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: var(--clr-primary-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #F5F5F5;
+  color: #424242;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: #EEEEEE;
+}
+
+.btn-danger {
+  background: #EF5350;
+  color: #FFFFFF;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.btn-danger:hover {
+  background: #E53935;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ========== INVENTARIO QTY BADGE ========== */
 .inventario-qty-badge {
   display: inline-block;

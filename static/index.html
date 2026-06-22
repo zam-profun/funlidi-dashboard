@@ -463,6 +463,10 @@
           <option value="completo">Completo</option>
           <option value="incompleto">Incompleto</option>
         </select>
+        <button class="btn btn-add" id="btnInventarioAdd">
+          <span class="material-icons">add</span>
+          Añadir
+        </button>
         <span class="table-count" id="inventarioTableCount">0 registros</span>
       </div>
       <div class="table-wrapper">
@@ -509,6 +513,87 @@
         <p class="download-info" id="inventarioDownloadInfo"></p>
       </div>
     </section>
+
+    <!-- ========== INVENTARIO MODALS ========== -->
+
+    <div class="modal-overlay" id="inventarioModalOverlay" style="display:none" onclick="closeInventarioModal(event)">
+      <div class="modal" id="inventarioModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">inventory</span>
+          <span class="modal-title" id="inventarioModalTitle">Añadir registro</span>
+          <span class="material-icons modal-close" onclick="closeInventarioModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editTelegramUserId" value="">
+          <div class="form-group">
+            <label class="form-label">Telegram @username <span class="form-label-hint">(opcional)</span></label>
+            <input type="text" id="invFormUsername" class="form-input" placeholder="@usuario">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="invFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cédula / DNI</label>
+              <input type="text" id="invFormDni" class="form-input" placeholder="Ej: 12345678">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">País</label>
+            <input type="text" id="invFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cajas Microlingotes</label>
+              <input type="number" id="invFormCajamicro" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cajas Dinares</label>
+              <input type="number" id="invFormCajadinar" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pergaminos Alemanes</label>
+              <input type="number" id="invFormPerAleman" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pergaminos Nonillon</label>
+              <input type="number" id="invFormPerTop" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cajas Pergaminos Dragones</label>
+            <input type="number" id="invFormPerDragon" class="form-input" min="0" placeholder="0">
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeInventarioModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnInventarioModalSubmit" onclick="submitInventarioForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="inventarioDeleteOverlay" style="display:none" onclick="closeInventarioDeleteModal(event)">
+      <div class="modal modal-sm" id="inventarioDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar registro</span>
+          <span class="material-icons modal-close" onclick="closeInventarioDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">¿Seguro de eliminar?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acción no se puede deshacer.</p>
+          <input type="hidden" id="deleteTelegramUserId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeInventarioDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeInventarioDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <script src="/static/script.js"></script>
