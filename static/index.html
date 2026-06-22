@@ -18,6 +18,7 @@
           <option value="pagos">FUNLIDI - PAGOS</option>
           <option value="ayudas">BOT - AYUDAS H.</option>
           <option value="inventario">BOT - INVENTARIO</option>
+          <option value="consulta">CONSULTA GENERAL</option>
         </select>
       </div>
     </div>
@@ -87,6 +88,12 @@
       <button class="nav-btn" data-section="inventario-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-consulta" style="display:none">
+      <button class="nav-btn active" data-section="consulta-buscar">
+        <span class="material-icons">search</span>
+        <span>Buscar</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -512,6 +519,21 @@
         </button>
         <p class="download-info" id="inventarioDownloadInfo"></p>
       </div>
+    </section>
+
+    <!-- ========== CONSULTA SECTION ========== -->
+
+    <section class="content-section" id="section-consulta-buscar">
+      <div class="consulta-search-wrapper">
+        <span class="material-icons consulta-search-icon">search</span>
+        <input type="text" id="consultaSearchInput" placeholder="Buscar por nombre, documento, email o @usuario en todos los modulos..." class="consulta-search-input">
+        <button class="btn btn-consulta-search" id="btnConsultaSearch">Buscar</button>
+      </div>
+      <div class="consulta-hint" id="consultaHint">
+        <span class="material-icons consulta-hint-icon">info</span>
+        <span>Ingresa al menos 2 caracteres para buscar en BOT principal, Ayudas Humanitarias, Inventario y Pagos.</span>
+      </div>
+      <div id="consultaResults" class="consulta-results"></div>
     </section>
 
     <!-- ========== INVENTARIO MODALS ========== -->

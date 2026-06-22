@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAyudasDownload();
   initInventarioSearch();
   initInventarioDownload();
+  initConsultaSearch();
   initTimezone();
 
   loadSection("registros");
@@ -46,6 +47,7 @@ function switchModule(module) {
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
+  document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
@@ -83,6 +85,7 @@ function switchSection(section) {
     "inventario-registros": "Registros - Inventario",
     "inventario-estadisticas": "Estadisticas - Inventario",
     "inventario-descargar": "Descargar - Inventario",
+    "consulta-buscar": "Consulta General",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -100,6 +103,7 @@ function loadSection(section) {
   if (section === "ayudas-estadisticas") loadAyudasStats();
   if (section === "inventario-registros") loadInventarioRegistros();
   if (section === "inventario-estadisticas") loadInventarioStats();
+  if (section === "consulta-buscar") loadConsulta();
 }
 
 function startAutoRefresh() {
@@ -1401,5 +1405,198 @@ async function executeInventarioDelete() {
   } finally {
     btn.disabled = false;
     btn.textContent = "Eliminar";
+  }
+}
+
+
+// ========== CONSULTA FUNCTIONS ==========
+
+function initConsultaSearch() {
+  const input = document.getElementById("consultaSearchInput");
+  const btn = document.getElementById("btnConsultaSearch");
+
+  input.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      loadConsulta();
+    }
+  });
+
+  btn.addEventListener("click", function() {
+    loadConsulta();
+  });
+}
+
+async function loadConsulta() {
+  const q = document.getElementById("consultaSearchInput").value.trim();
+  const resultsEl = document.getElementById("consultaResults");
+  const hintEl = document.getElementById("consultaHint");
+
+  if (q.length < 2) {
+    hintEl.innerHTML = '<span class="material-icons consulta-hint-icon">info</span><span>Ingresa al menos 2 caracteres para buscar.</span>';
+    resultsEl.innerHTML = "";
+    return;
+  }
+
+  hintEl.style.display = "none";
+  resultsEl.innerHTML = '<div class="consulta-loading"><span class="material-icons consulta-loading-icon">hourglass_top</span>Buscando en todos los modulos...</div>';
+
+  try {
+    const resp = await fetch("/api/consulta?q=" + encodeURIComponent(q));
+    if (!resp.ok) throw new Error("Error en la consulta");
+    const json = await resp.json();
+    renderConsulta(json);
+    updateRefreshIndicator(false);
+  } catch (err) {
+    resultsEl.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al realizar la consulta. Intenta de nuevo.</p></div>';
+  }
+}
+
+function renderConsulta(data) {
+  const resultsEl = document.getElementById("consultaResults");
+  const hintEl = document.getElementById("consultaHint");
+  const persons = data.persons || [];
+
+  if (persons.length === 0) {
+    hintEl.style.display = "flex";
+    hintEl.innerHTML = '<span class="material-icons consulta-hint-icon">search_off</span><span>No se encontraron resultados para "' + data.query + '".</span>';
+    resultsEl.innerHTML = "";
+    return;
+  }
+
+  let html = '<div class="consulta-summary">' + persons.length + " persona" + (persons.length !== 1 ? "s" : "") + ' encontrada' + (persons.length !== 1 ? "s" : "") + ' para "' + data.query + '"</div>';
+
+  for (const p of persons) {
+    const name = p.name || "(sin nombre)";
+    const idents = [];
+    if (p.identifiers.dni) idents.push("DNI: " + p.identifiers.dni);
+    if (p.identifiers.telegram_username) idents.push("@" + p.identifiers.telegram_username);
+    if (p.identifiers.email) idents.push(p.identifiers.email);
+    const identStr = idents.join(" · ");
+
+    let sourcesHtml = "";
+
+    // BOT section
+    if (p.bot && p.bot.exists) {
+      sourcesHtml += buildConsultaSourceHtml("bot", "smart_toy", "BOT Principal", [
+        { label: "Nombres", val: p.bot.nombres_completos },
+        { label: "Documento", val: p.bot.numero_documento },
+        { label: "Email", val: p.bot.correo_electronico },
+        { label: "Telegram", val: p.bot.telegram_username ? "@" + p.bot.telegram_username : null },
+        { label: "Actualizaci\u00f3n", val: formatDate(p.bot.updated_at) },
+      ]);
+    }
+
+    // AYUDAS section
+    if (p.ayudas && p.ayudas.exists) {
+      const benefStr = p.ayudas.beneficiarios > 0 ? p.ayudas.beneficiarios + " beneficiario" + (p.ayudas.beneficiarios !== 1 ? "s" : "") : "0";
+      const estadoBadge = p.ayudas.estado === "completo" ? '<span class="estado-badge estado-completo">Completo</span>'
+        : p.ayudas.estado === "sin_banco" ? '<span class="estado-badge estado-sinbanco">Sin banco</span>'
+        : '<span class="estado-badge estado-incompleto">Incompleto</span>';
+
+      let extraHtml = '<div class="consulta-field"><span class="consulta-field-label">Beneficiarios:</span> ' + benefStr + "</div>";
+      extraHtml += '<div class="consulta-field"><span class="consulta-field-label">Estado:</span> ' + estadoBadge + "</div>";
+
+      sourcesHtml += buildConsultaSourceHtml("ayudas", "volunteer_activism", "Ayudas Humanitarias", [
+        { label: "Nombre", val: p.ayudas.nombre },
+        { label: "DNI", val: p.ayudas.dni },
+        { label: "Pa\u00eds", val: p.ayudas.pais },
+        { label: "Tel\u00e9fono", val: p.ayudas.telefono },
+        { label: "Correo", val: p.ayudas.correo },
+        { label: "Actualizaci\u00f3n", val: formatDate(p.ayudas.updated_at) },
+      ], extraHtml);
+    }
+
+    // INVENTARIO section
+    if (p.inventario && p.inventario.exists) {
+      const mats = p.inventario.materiales || {};
+      const hasMat = mats.cajamicro || mats.cajadinar || mats.per_aleman || mats.per_top || mats.per_dragon;
+
+      let matHtml = "";
+      if (hasMat) {
+        matHtml = '<div class="consulta-field"><span class="consulta-field-label">Materiales:</span></div>';
+        if (mats.cajamicro) matHtml += '<div class="consulta-mat-row"><span class="consulta-mat-label">Cajas Micro:</span><span class="consulta-mat-val">' + mats.cajamicro + "</span></div>";
+        if (mats.cajadinar) matHtml += '<div class="consulta-mat-row"><span class="consulta-mat-label">Cajas Dinar:</span><span class="consulta-mat-val">' + mats.cajadinar + "</span></div>";
+        if (mats.per_aleman) matHtml += '<div class="consulta-mat-row"><span class="consulta-mat-label">Perg. Alemanes:</span><span class="consulta-mat-val">' + mats.per_aleman + "</span></div>";
+        if (mats.per_top) matHtml += '<div class="consulta-mat-row"><span class="consulta-mat-label">Perg. Nonillon:</span><span class="consulta-mat-val">' + mats.per_top + "</span></div>";
+        if (mats.per_dragon) matHtml += '<div class="consulta-mat-row"><span class="consulta-mat-label">Cajas Dragones:</span><span class="consulta-mat-val">' + mats.per_dragon + "</span></div>";
+      }
+
+      sourcesHtml += buildConsultaSourceHtml("inventario", "inventory", "Inventario", [
+        { label: "Nombre", val: p.inventario.nombre },
+        { label: "DNI", val: p.inventario.dni },
+        { label: "Pa\u00eds", val: p.inventario.pais },
+        { label: "Actualizaci\u00f3n", val: formatDate(p.inventario.updated_at) },
+      ], hasMat ? matHtml : "");
+    }
+
+    // PAGOS section
+    if (p.pagos && p.pagos.exists) {
+      let pagosExtra = '<div class="consulta-field"><span class="consulta-field-label">Transacciones:</span> ' + p.pagos.transacciones + "</div>";
+      pagosExtra += '<div class="consulta-field"><span class="consulta-field-label">Total COP:</span> <strong>' + formatCOP(p.pagos.total_cop) + "</strong></div>";
+      if (p.pagos.ultimo_pago) {
+        pagosExtra += '<div class="consulta-field"><span class="consulta-field-label">\u00daltimo pago:</span> ' + formatDateShort(p.pagos.ultimo_pago) + "</div>";
+      }
+
+      const detalles = p.pagos.detalles || [];
+      if (detalles.length > 0) {
+        pagosExtra += '<div class="consulta-pagos-mini"><table class="consulta-pagos-table"><thead><tr><th>Fecha</th><th>Flayer</th><th>Valor</th></tr></thead><tbody>';
+        for (const d of detalles) {
+          pagosExtra += "<tr><td>" + formatDateShort(d.fecha) + "</td><td>" + (d.flayer || "-") + "</td><td class='valor-cell'>" + formatCOP(d.valor) + "</td></tr>";
+        }
+        pagosExtra += "</tbody></table></div>";
+      }
+
+      sourcesHtml += buildConsultaSourceHtml("pagos", "payments", "Pagos", [], pagosExtra);
+    }
+
+    html += '<div class="consulta-result-card">';
+    html += '<div class="consulta-person-header">';
+    html += '<span class="material-icons consulta-person-icon">person</span>';
+    html += '<div class="consulta-person-info">';
+    html += '<span class="consulta-person-name">' + name + "</span>";
+    if (identStr) html += '<span class="consulta-person-identifiers">' + identStr + "</span>";
+    html += "</div></div>";
+    html += sourcesHtml;
+    html += "</div>";
+  }
+
+  resultsEl.innerHTML = html;
+}
+
+function buildConsultaSourceHtml(sourceClass, icon, title, fields, extraHtml) {
+  let bodyHtml = "";
+  for (const f of fields) {
+    if (f.val) {
+      bodyHtml += '<div class="consulta-field"><span class="consulta-field-label">' + f.label + ":</span> " + f.val + "</div>";
+    }
+  }
+  if (extraHtml) bodyHtml += extraHtml;
+
+  if (!bodyHtml) return "";
+
+  return (
+    '<div class="consulta-source-section consulta-source-' + sourceClass + '">' +
+      '<div class="consulta-source-header" onclick="toggleConsultaSource(this)">' +
+        '<span class="material-icons consulta-source-icon">' + icon + "</span>" +
+        '<span class="consulta-source-title">' + title + "</span>" +
+        '<span class="material-icons consulta-source-arrow">expand_less</span>' +
+      "</div>" +
+      '<div class="consulta-source-body">' + bodyHtml + "</div>" +
+    "</div>"
+  );
+}
+
+function toggleConsultaSource(headerEl) {
+  const section = headerEl.closest(".consulta-source-section");
+  const body = section.querySelector(".consulta-source-body");
+  const arrow = section.querySelector(".consulta-source-arrow");
+
+  if (body.style.display === "none") {
+    body.style.display = "";
+    arrow.textContent = "expand_less";
+  } else {
+    body.style.display = "none";
+    arrow.textContent = "expand_more";
   }
 }

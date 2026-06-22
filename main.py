@@ -868,3 +868,198 @@ async def edit_inventario_entry(telegram_user_id: int, data: dict = Body(...)):
 async def delete_inventario_entry(telegram_user_id: int):
     supabase_inventario.table(INVENTARIO_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
     return {"success": True}
+
+
+# ========== CONSULTA ENDPOINT ==========
+
+
+def _match_q(val, q):
+    return val and q.lower() in str(val).lower()
+
+
+def _norm(val):
+    if not val:
+        return ""
+    return str(val).strip().lower()
+
+
+@app.get("/api/consulta")
+async def get_consulta(q: str = ""):
+    q = q.strip()
+    if len(q) < 2:
+        return {"query": q, "total": 0, "persons": []}
+
+    persons = {}
+
+    def get_or_create(key):
+        if key not in persons:
+            persons[key] = {
+                "name": "",
+                "identifiers": {},
+                "bot": {"exists": False},
+                "ayudas": {"exists": False},
+                "inventario": {"exists": False},
+                "pagos": {"exists": False},
+            }
+        return persons[key]
+
+    def link_record(rec, key_fields, source_name, extract_fn):
+        def link_key(r):
+            parts = []
+            for k in key_fields:
+                v = _norm(r.get(k))
+                if v:
+                    parts.append(f"{k}:{v}")
+            return "|".join(parts) if parts else None
+
+        keys = set()
+        for field in key_fields:
+            v = rec.get(field)
+            if v is not None and str(v).strip():
+                keys.add(("field:" + str(v).strip().lower(), source_name))
+
+        if not keys:
+            keys.add((source_name + ":" + str(id(rec)), source_name))
+
+        for k, src in keys:
+            p = get_or_create(k)
+            extract_fn(p, rec)
+            for other_k, other_src in keys:
+                if other_k != k:
+                    persons[other_k] = p
+
+    # --- 1. Buscar en BOT (usuarios_funlidi) ---
+    try:
+        bot_result = supabase.table("usuarios_funlidi").select("*").execute()
+        for r in (bot_result.data or []):
+            if not any(_match_q(r.get(f), q) for f in ["nombres_completos", "numero_documento", "correo_electronico", "telegram_username"]):
+                continue
+            def extract_bot(p, rec):
+                p["name"] = p["name"] or rec.get("nombres_completos") or ""
+                p["identifiers"]["telegram_user_id"] = rec.get("telegram_user_id")
+                p["identifiers"]["telegram_username"] = rec.get("telegram_username") or p["identifiers"].get("telegram_username")
+                p["identifiers"]["dni"] = rec.get("numero_documento") or p["identifiers"].get("dni")
+                p["identifiers"]["email"] = rec.get("correo_electronico") or p["identifiers"].get("email")
+                p["bot"] = {
+                    "exists": True,
+                    "nombres_completos": rec.get("nombres_completos"),
+                    "numero_documento": rec.get("numero_documento"),
+                    "correo_electronico": rec.get("correo_electronico"),
+                    "telegram_username": rec.get("telegram_username"),
+                    "updated_at": rec.get("updated_at") or rec.get("created_at"),
+                }
+            link_record(r, ["telegram_user_id", "numero_documento", "correo_electronico"], "bot", extract_bot)
+    except Exception:
+        pass
+
+    # --- 2. Buscar en AYUDAS (ayudas_humanitarias) ---
+    try:
+        ayudas_result = supabase_ayudas.table(AYUDAS_TABLE).select("*").execute()
+        for r in (ayudas_result.data or []):
+            if not any(_match_q(r.get(f), q) for f in ["nombre", "dni", "correo", "telegram_username"]):
+                continue
+            def extract_ayudas(p, rec):
+                p["name"] = p["name"] or rec.get("nombre") or ""
+                p["identifiers"]["telegram_user_id"] = rec.get("telegram_user_id") or p["identifiers"].get("telegram_user_id")
+                p["identifiers"]["telegram_username"] = rec.get("telegram_username") or p["identifiers"].get("telegram_username")
+                p["identifiers"]["dni"] = rec.get("dni") or p["identifiers"].get("dni")
+                p["identifiers"]["email"] = rec.get("correo") or p["identifiers"].get("email")
+                benef_count = 0
+                uid = rec.get("telegram_user_id")
+                if uid is not None:
+                    try:
+                        benef = supabase_ayudas.table(AYUDAS_BENEF_TABLE).select("*").eq("telegram_user_id", uid).execute()
+                        benef_count = len(benef.data or [])
+                    except Exception:
+                        pass
+                p["ayudas"] = {
+                    "exists": True,
+                    "nombre": rec.get("nombre"),
+                    "dni": rec.get("dni"),
+                    "pais": rec.get("pais"),
+                    "estado": _ayudas_estado(rec),
+                    "beneficiarios": benef_count,
+                    "telefono": rec.get("telefono"),
+                    "correo": rec.get("correo"),
+                    "updated_at": rec.get("updated_at") or rec.get("created_at"),
+                }
+            link_record(r, ["telegram_user_id", "dni", "correo"], "ayudas", extract_ayudas)
+    except Exception:
+        pass
+
+    # --- 3. Buscar en INVENTARIO (inventario_adquisiciones) ---
+    try:
+        inv_result = supabase_inventario.table(INVENTARIO_TABLE).select("*").execute()
+        for r in (inv_result.data or []):
+            if not any(_match_q(r.get(f), q) for f in ["nombre", "dni", "telegram_username"]):
+                continue
+            def extract_inventario(p, rec):
+                p["name"] = p["name"] or rec.get("nombre") or ""
+                p["identifiers"]["telegram_user_id"] = rec.get("telegram_user_id") or p["identifiers"].get("telegram_user_id")
+                p["identifiers"]["telegram_username"] = rec.get("telegram_username") or p["identifiers"].get("telegram_username")
+                p["identifiers"]["dni"] = rec.get("dni") or p["identifiers"].get("dni")
+                p["inventario"] = {
+                    "exists": True,
+                    "nombre": rec.get("nombre"),
+                    "dni": rec.get("dni"),
+                    "pais": rec.get("pais"),
+                    "materiales": {
+                        "cajamicro": to_int(rec.get("cajamicro")),
+                        "cajadinar": to_int(rec.get("cajadinar")),
+                        "per_aleman": to_int(rec.get("per_aleman")),
+                        "per_top": to_int(rec.get("per_top")),
+                        "per_dragon": to_int(rec.get("per_dragon")),
+                    },
+                    "updated_at": rec.get("updated_at") or rec.get("created_at"),
+                }
+            link_record(r, ["telegram_user_id", "dni"], "inventario", extract_inventario)
+    except Exception:
+        pass
+
+    # --- 4. Buscar en PAGOS (Excel) ---
+    try:
+        pagos_records = _load_pagos_data()
+        for r in pagos_records:
+            if not any(_match_q(r.get(f), q) for f in ["nombres", "identificacion"]):
+                continue
+            def extract_pagos(p, rec):
+                p["name"] = p["name"] or rec.get("nombres") or ""
+                p["identifiers"]["dni"] = rec.get("identificacion") or p["identifiers"].get("dni")
+                pagos_data = p.get("pagos", {})
+                if not pagos_data.get("exists"):
+                    pagos_data["exists"] = True
+                    pagos_data["transacciones"] = 0
+                    pagos_data["total_cop"] = 0
+                    pagos_data["detalles"] = []
+                    pagos_data["ultimo_pago"] = ""
+                pagos_data["transacciones"] += 1
+                pagos_data["total_cop"] += int(rec.get("valor", 0))
+                if rec.get("fecha") and rec["fecha"] > pagos_data.get("ultimo_pago", ""):
+                    pagos_data["ultimo_pago"] = rec["fecha"]
+                pagos_data["detalles"].append({
+                    "fecha": rec.get("fecha", ""),
+                    "flayer": rec.get("flayer", ""),
+                    "valor": int(rec.get("valor", 0)),
+                })
+                p["pagos"] = pagos_data
+            link_record(r, ["identificacion"], "pagos", extract_pagos)
+    except Exception:
+        pass
+
+    # Deduplicate persons dict into a list
+    seen = set()
+    result_list = []
+    for key, p in persons.items():
+        pid = str(p["identifiers"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        # Sort pagos detalles newest first
+        if p["pagos"]["exists"]:
+            p["pagos"]["detalles"].sort(key=lambda x: x.get("fecha", ""), reverse=True)
+            p["pagos"]["detalles"] = p["pagos"]["detalles"][:10]
+        result_list.append(p)
+
+    result_list.sort(key=lambda p: p["name"] or "")
+
+    return {"query": q, "total": len(result_list), "persons": result_list}
