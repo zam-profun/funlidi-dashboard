@@ -3,7 +3,56 @@ let refreshInterval = null;
 let lastRefreshTime = null;
 let currentModule = "bot";
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", function() {
+  checkAuth().then(function(resp) {
+    if (resp.authenticated) {
+      document.getElementById("userNameDisplay").textContent = resp.username;
+      document.getElementById("userBadge").style.display = "";
+      initializeApp();
+    }
+  });
+
+  document.getElementById("loginButton").addEventListener("click", login);
+  document.getElementById("loginPassword").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") login();
+  });
+  document.getElementById("btnLogout").addEventListener("click", logout);
+});
+
+function checkAuth() {
+  return fetch("/api/auth/check").then(function(r) { return r.json(); })
+    .catch(function() { return {authenticated: false}; });
+}
+
+function login() {
+  var pwd = document.getElementById("loginPassword").value;
+  document.getElementById("loginError").textContent = "";
+  fetch("/api/auth/login", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({password: pwd})
+  }).then(function(r) {
+    if (!r.ok) {
+      document.getElementById("loginError").textContent = "Contraseña incorrecta";
+      return;
+    }
+    return r.json();
+  }).then(function(data) {
+    if (!data) return;
+    document.getElementById("loginOverlay").style.display = "none";
+    document.getElementById("userNameDisplay").textContent = data.username;
+    document.getElementById("userBadge").style.display = "";
+    initializeApp();
+  });
+}
+
+function logout() {
+  fetch("/api/auth/logout", {method: "POST"}).then(function() {
+    location.reload();
+  });
+}
+
+function initializeApp() {
   initNavigation();
   initModuleSelector();
   initRefresh();
@@ -20,7 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadSection("registros");
   startAutoRefresh();
-});
+}
 
 function initNavigation() {
   document.querySelectorAll(".sidebar-nav").forEach((nav) => {
@@ -1568,7 +1617,7 @@ function renderConsulta(data) {
       let farleyExtra = '<div class="consulta-field"><span class="consulta-field-label">Compras:</span> ' + p.farley.purchase_count + '</div>';
       farleyExtra += '<div class="consulta-field"><span class="consulta-field-label">Total gastado:</span> <strong>$' + (p.farley.total_spent || 0).toLocaleString() + '</strong></div>';
       if (p.farley.categories && p.farley.categories.length > 0) {
-        farleyExtra += '<div class="consulta-field"><span class="consulta-field-label">Categorías:</span> ' + p.farley.categories.map(function(t) { return '<span class="tag tag-' + t + '">' + t + '</span>'; }).join(' ') + '</div>';
+        farleyExtra += '<div class="consulta-field"><span class="consulta-field-label">Categorías:</span> ' + p.farley.categories.map(function(t) { return '<span class="tag tag-' + t + '">' + (FARLEY_TAG_NAMES[t] || t) + '</span>'; }).join(' ') + '</div>';
       }
       const purchases = p.farley.purchases || [];
       if (purchases.length > 0) {
@@ -1648,6 +1697,7 @@ const CRM_PAGE_SIZE = 25;
 let crmActiveTags = new Set();
 let crmSelectedMemberIdx = 0;
 let crmDetalleSearch = '';
+const FARLEY_TAG_NAMES = { dinar: "DINARES", gold: "ORO", membership: "MEMBRESIAS", vaquita: "VAQUITAS", bonus: "BONUS", card: "TARJETA", other: "OTROS" };
 
 function initFarleySearch() {
   document.getElementById("farleySearchInput").addEventListener("input", function() {
@@ -1675,7 +1725,7 @@ async function loadFarleyResumen() {
   const s = crmData.summary;
   const m = crmData.members;
   const topBuyers = [...m].sort(function(a, b) { return b.purchase_count - a.purchase_count; }).slice(0, 10);
-  const catNames = { dinar: "Dinares", gold: "Oro", membership: "Membresías", vaquita: "Vaquita", bonus: "Bonos", card: "Tarjetas", other: "Otros" };
+  const catNames = FARLEY_TAG_NAMES;
 
   let html = '<div class="stats-grid">';
   html += '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + s.total_members + '</span><span class="stat-label">Miembros</span></div></div>';
@@ -1779,7 +1829,7 @@ async function loadFarleyPromociones() {
 
   const flayers = crmData.summary.flayers;
   const s = crmData.summary;
-  const catNames = { dinar: "Dinares", gold: "Oro", membership: "Membresías", vaquita: "Vaquita (Comp. Compartida)", bonus: "Bonos", card: "Tarjetas", other: "Otros" };
+  const catNames = FARLEY_TAG_NAMES;
   const allTags = ["dinar", "gold", "membership", "vaquita", "bonus", "card", "other"];
   const isAll = crmActiveTags.size === 0;
 
@@ -1850,7 +1900,7 @@ async function loadFarleyPromociones() {
       html += '<span style="color:#9E9E9E">' + formatCOP(f.total_amount || 0) + '</span>';
       const otherTags = f.tags.filter(function(t) { return t !== tag; });
       for (const ot of otherTags) {
-        html += '<span class="tag tag-' + ot + '" style="font-size:10px">' + ot + '</span>';
+        html += '<span class="tag tag-' + ot + '" style="font-size:10px">' + (FARLEY_TAG_NAMES[ot] || ot) + '</span>';
       }
       html += '</div>';
       if (f.benefit_samples && f.benefit_samples.length) {
@@ -2005,6 +2055,8 @@ async function loadFarleyGraficos() {
 
 // ========== DETALLE ==========
 
+let crmDetalleView = "list";
+
 async function loadFarleyDetalle() {
   const el = document.getElementById("farleyDetalleContent");
   await _ensureCrmData();
@@ -2013,97 +2065,126 @@ async function loadFarleyDetalle() {
   const q = crmDetalleSearch.toLowerCase();
   const filtered = q ? members.filter(function(m) {
     return (m.name && m.name.toLowerCase().includes(q)) || (m.cedula && m.cedula.toLowerCase().includes(q));
-  }) : members;
+  }) : [];
 
-  let opts = '<option value="">' + (filtered.length === members.length ? "Seleccione un miembro..." : filtered.length + " resultados — seleccione...") + '</option>';
-  for (let i = 0; i < filtered.length; i++) {
-    const m = filtered[i];
-    const realIdx = members.indexOf(m);
-    const sel = realIdx === crmSelectedMemberIdx ? "selected" : "";
-    opts += '<option value="' + realIdx + '" ' + sel + '>' + m.name + ' — ' + m.purchase_count + ' compras — ' + formatCOP(m.total_spent || 0) + '</option>';
-  }
-
-  let html = '';
+  let html = "";
   html += '<div class="consulta-search-wrapper" style="margin-bottom:16px">';
   html += '<span class="material-icons consulta-search-icon">search</span>';
-  html += '<input type="text" id="farleyDetalleSearchInput" class="consulta-search-input" placeholder="Buscar por nombre o cédula..." value="' + crmDetalleSearch + '">';
-  html += '</div>';
-  html += '<select id="farleyDetalleSelect" onchange="farleyChangeMember(this.value)" style="width:100%;max-width:500px;padding:10px 14px;border:1px solid #E0E0E0;border-radius:8px;font-size:13px;margin-bottom:16px;font-family:inherit">' + opts + '</select>';
-  html += '<div id="farleyDetalleContentInner"></div>';
+  html += '<input type="text" id="farleyDetalleSearchInput" class="consulta-search-input" placeholder="Buscar por nombre o c\u00e9dula..." value="' + crmDetalleSearch + '">';
+  html += "</div>";
+
+  if (crmDetalleView === "detail" && crmSelectedMemberIdx >= 0 && members[crmSelectedMemberIdx]) {
+    html += farleyBuildDetailView(members[crmSelectedMemberIdx]);
+  } else {
+    crmDetalleView = "list";
+    if (crmDetalleSearch && filtered.length === 0) {
+      html += '<div class="empty-state"><span class="material-icons empty-icon">search_off</span><p>No se encontraron miembros con ese nombre o c\u00e9dula.</p></div>';
+    } else if (crmDetalleSearch) {
+      html += '<div style="font-size:13px;color:#9E9E9E;margin-bottom:12px">' + filtered.length + " resultado" + (filtered.length !== 1 ? "s" : "") + '</div>';
+      for (let i = 0; i < filtered.length; i++) {
+        const m = filtered[i];
+        const realIdx = members.indexOf(m);
+        const tagsList = [...new Set(m.purchases.flatMap(function(p) { return p.tags; }))];
+        html += '<div class="farley-detalle-card" onclick="farleySelectMember(' + realIdx + ')">';
+        html += '<div class="farley-detalle-card-top">';
+        html += '<div class="farley-detalle-card-name"><span class="material-icons" style="font-size:20px;color:var(--clr-primary);vertical-align:middle;margin-right:8px">person</span><strong>' + m.name + '</strong></div>';
+        html += '<div class="farley-detalle-card-stats">';
+        html += '<span class="farley-stat-badge">' + m.purchase_count + ' compras</span>';
+        html += '<span class="farley-stat-badge farley-stat-amount">' + formatCOP(m.total_spent || 0) + '</span>';
+        html += "</div></div>";
+        html += '<div class="farley-detalle-card-meta">';
+        html += "<span>" + (m.cedula || "—") + "</span>";
+        if (m.email) html += '<span> \u00b7 ' + m.email + "</span>";
+        if (m.phone) html += '<span> \u00b7 ' + m.phone + "</span>";
+        html += "</div>";
+        if (tagsList.length > 0) {
+          html += '<div class="farley-detalle-card-tags">';
+          html += tagsList.map(function(t) { return '<span class="tag tag-' + t + '">' + (FARLEY_TAG_NAMES[t] || t) + "</span>"; }).join(" ");
+          html += "</div>";
+        }
+        html += '<div class="farley-detalle-card-action"><span class="material-icons" style="font-size:18px;vertical-align:middle">visibility</span> Ver detalle</div>';
+        html += "</div>";
+      }
+    } else {
+      html += '<div class="empty-state" style="padding:20px"><span class="material-icons empty-icon">person_search</span><p>Escribe un nombre o c\u00e9dula para buscar miembros.</p></div>';
+    }
+  }
 
   el.innerHTML = html;
 
   document.getElementById("farleyDetalleSearchInput").addEventListener("input", function() {
+    crmDetalleView = "list";
     crmDetalleSearch = this.value;
     loadFarleyDetalle();
   });
-
-  if (crmSelectedMemberIdx >= 0 && members[crmSelectedMemberIdx]) {
-    farleyShowMemberDetail(members[crmSelectedMemberIdx]);
-  }
 }
 
-function farleyChangeMember(val) {
-  if (val === "") {
-    document.getElementById("farleyDetalleContentInner").innerHTML = "";
-    return;
-  }
-  crmSelectedMemberIdx = parseInt(val);
-  farleyShowMemberDetail(crmData.members[crmSelectedMemberIdx]);
+function farleySelectMember(idx) {
+  crmSelectedMemberIdx = idx;
+  crmDetalleView = "detail";
+  loadFarleyDetalle();
 }
 
-function farleyShowMemberDetail(member) {
+function farleyBackToList() {
+  crmDetalleView = "list";
+  loadFarleyDetalle();
+}
+
+function farleyBuildDetailView(member) {
   const tagsList = [...new Set(member.purchases.flatMap(function(p) { return p.tags; }))];
   const totalDinar = member.purchases.reduce(function(s, p) { return s + p.dinar_qty; }, 0);
   const totalGold = member.purchases.reduce(function(s, p) { return s + p.gold_qty; }, 0);
   const totalMemb = member.purchases.reduce(function(s, p) { return s + p.membership_qty; }, 0);
   const totalCard = member.purchases.reduce(function(s, p) { return s + p.card_qty; }, 0);
 
-  let html = '<div class="ayudas-detail-card">';
+  let html = "";
+  html += '<div class="farley-detalle-back" onclick="farleyBackToList()">';
+  html += '<span class="material-icons" style="font-size:20px;vertical-align:middle">arrow_back</span> Volver a resultados';
+  html += "</div>";
+
+  html += '<div class="ayudas-detail-card">';
   html += '<div class="ayudas-detail-section">';
-  html += '<div class="ayudas-detail-title"><span class="material-icons">person</span> ' + member.name + '</div>';
+  html += '<div class="ayudas-detail-title"><span class="material-icons">person</span> ' + member.name + "</div>";
   html += '<div class="ayudas-detail-grid">';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Cédula:</span><span class="ayudas-detail-value">' + (member.cedula || "—") + '</span></div>';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Email:</span><span class="ayudas-detail-value">' + (member.email || "—") + '</span></div>';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Teléfono:</span><span class="ayudas-detail-value">' + (member.phone || "—") + '</span></div>';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">send</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">' + (member.telegram || "—") + '</span></div>';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Ubicación:</span><span class="ayudas-detail-value">' + [member.city, member.department, member.country].filter(Boolean).join(", ") + '</span></div>';
-  html += '<div class="ayudas-detail-item"><span class="material-icons">cake</span><span class="ayudas-detail-label">Nacimiento:</span><span class="ayudas-detail-value">' + (member.birthdate || "—") + '</span></div>';
-  html += '</div></div>';
+  html += '<div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">C\u00e9dula:</span><span class="ayudas-detail-value">' + (member.cedula || "—") + "</span></div>";
+  html += '<div class="ayudas-detail-item"><span class="material-icons">email</span><span class="ayudas-detail-label">Email:</span><span class="ayudas-detail-value">' + (member.email || "—") + "</span></div>";
+  html += '<div class="ayudas-detail-item"><span class="material-icons">phone</span><span class="ayudas-detail-label">Tel\u00e9fono:</span><span class="ayudas-detail-value">' + (member.phone || "—") + "</span></div>";
+  html += '<div class="ayudas-detail-item"><span class="material-icons">send</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">' + (member.telegram || "—") + "</span></div>";
+  html += '<div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Ubicaci\u00f3n:</span><span class="ayudas-detail-value">' + [member.city, member.department, member.country].filter(Boolean).join(", ") + "</span></div>";
+  html += '<div class="ayudas-detail-item"><span class="material-icons">cake</span><span class="ayudas-detail-label">Nacimiento:</span><span class="ayudas-detail-value">' + (member.birthdate || "—") + "</span></div>";
+  html += "</div></div>";
 
   html += '<div class="ayudas-detail-section">';
-  html += '<div style="margin-bottom:12px"><strong style="font-size:14px">' + member.purchase_count + ' compras</strong>';
-  html += '<span style="color:#9E9E9E;margin-left:12px">Total: ' + formatCOP(member.total_spent || 0) + '</span>';
-  html += '<span style="margin-left:12px">' + tagsList.map(function(t) { return '<span class="tag tag-' + t + '">' + t + '</span>'; }).join(" ") + '</span></div>';
+  html += '<div style="margin-bottom:12px"><strong style="font-size:14px">' + member.purchase_count + " compras</strong>";
+  html += '<span style="color:#9E9E9E;margin-left:12px">Total: ' + formatCOP(member.total_spent || 0) + "</span>";
+  html += '<span style="margin-left:12px">' + tagsList.map(function(t) { return '<span class="tag tag-' + t + '">' + (FARLEY_TAG_NAMES[t] || t) + "</span>"; }).join(" ") + "</span></div>";
 
   if (totalDinar > 0 || totalGold > 0 || totalMemb > 0 || totalCard > 0) {
     html += '<div style="display:flex;gap:16px;font-size:13px;margin-bottom:14px;flex-wrap:wrap">';
-    if (totalDinar > 0) html += '<span style="color:#c4956a">📦 Total dinares recibidos: <strong>' + totalDinar + '</strong></span>';
-    if (totalGold > 0) html += '<span style="color:#d4a017">🥇 Total gold recibidos: <strong>' + totalGold + '</strong></span>';
-    if (totalMemb > 0) html += '<span style="color:#5a8ec4">🎫 Total membresías: <strong>' + totalMemb + '</strong></span>';
-    if (totalCard > 0) html += '<span style="color:#5a9a6a">💳 Total tarjetas: <strong>' + totalCard + '</strong></span>';
-    html += '</div>';
+    if (totalDinar > 0) html += '<span style="color:#c4956a">\ud83d\udce6 Total dinares recibidos: <strong>' + totalDinar + "</strong></span>";
+    if (totalGold > 0) html += '<span style="color:#d4a017">\ud83e\udd47 Total gold recibidos: <strong>' + totalGold + "</strong></span>";
+    if (totalMemb > 0) html += '<span style="color:#5a8ec4">\ud83c\udfab Total membres\u00edas: <strong>' + totalMemb + "</strong></span>";
+    if (totalCard > 0) html += '<span style="color:#5a9a6a">\ud83d\udcb3 Total tarjetas: <strong>' + totalCard + "</strong></span>";
+    html += "</div>";
   }
 
   const purchases = member.purchases || [];
   if (purchases.length > 0) {
-    html += '<div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Fecha</th><th>Promoción</th><th>Beneficio</th><th class="text-right">Monto</th><th>Pago</th><th>Tags</th><th>Líder</th></tr></thead><tbody>';
+    html += '<div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Fecha</th><th>Promoci\u00f3n</th><th>Beneficio</th><th class="text-right">Monto</th><th>Pago</th><th>Tags</th><th>L\u00edder</th></tr></thead><tbody>';
     for (let i = 0; i < purchases.length; i++) {
       const p = purchases[i];
       const gGram = p.gold_grams ? " " + p.gold_grams + "GR" : "";
       const tagHtml = p.tags.map(function(t) {
-        return t === "gold" && gGram ? '<span class="tag tag-' + t + '">' + t + gGram + "</span>" : '<span class="tag tag-' + t + '">' + t + "</span>";
+        return t === "gold" && gGram ? '<span class="tag tag-' + t + '">' + (FARLEY_TAG_NAMES[t] || t) + gGram + "</span>" : '<span class="tag tag-' + t + '">' + (FARLEY_TAG_NAMES[t] || t) + "</span>";
       }).join(" ");
       const benefitText = p.benefit_text ? p.benefit_text.slice(0, 80) + (p.benefit_text.length > 80 ? "..." : "") : "—";
       html += '<tr><td>' + (i + 1) + '</td><td style="white-space:nowrap">' + (p.date || "—") + '</td><td style="max-width:220px">' + (p.flayer || "—") + '</td><td style="max-width:260px;font-size:12px;color:#9E9E9E">' + benefitText + '</td><td class="text-right">' + (p.amount ? formatCOP(p.amount) : "—") + '</td><td>' + (p.payment || "—") + '</td><td>' + tagHtml + '</td><td style="color:#9E9E9E;font-size:12px">' + (p.leader || "—") + '</td></tr>';
     }
-    html += '</tbody></table></div>';
+    html += "</tbody></table></div>";
   } else {
     html += '<div class="empty-state" style="padding:20px;text-align:center;color:#9E9E9E">No tiene compras registradas.</div>';
   }
 
-  html += '<div class="ayudas-detail-section ayudas-detail-section-meta">';
-  html += '</div></div>';
-
-  document.getElementById("farleyDetalleContentInner").innerHTML = html;
+  html += "</div></div>";
+  return html;
 }

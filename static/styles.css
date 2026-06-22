@@ -1690,3 +1690,139 @@ body {
 #farleyPagination button:disabled {
   opacity:0.4;cursor:default
 }
+
+/* ========== FARLEY DETALLE CARDS ========== */
+
+.farley-detalle-card {
+  background:#FFFFFF;
+  border:1px solid #E0E0E0;
+  border-radius:10px;
+  padding:14px 18px;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:all .15s ease;
+  border-left:3px solid var(--clr-primary)
+}
+
+.farley-detalle-card:hover {
+  border-color:var(--clr-primary);
+  box-shadow:0 2px 8px rgba(var(--clr-primary-rgb),0.12)
+}
+
+.farley-detalle-card-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:4px
+}
+
+.farley-detalle-card-name {
+  font-size:15px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.farley-detalle-card-stats {
+  display:flex;
+  gap:8px;
+  flex-shrink:0
+}
+
+.farley-stat-badge {
+  display:inline-block;
+  padding:2px 10px;
+  border-radius:12px;
+  font-size:11px;
+  font-weight:600;
+  background:var(--clr-bg-light);
+  color:var(--clr-primary-dark);
+  white-space:nowrap
+}
+
+.farley-stat-amount {
+  background:var(--clr-primary);
+  color:#212121
+}
+
+.farley-detalle-card-meta {
+  font-size:12px;
+  color:#9E9E9E;
+  margin-bottom:6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+
+.farley-detalle-card-tags {
+  margin-bottom:6px
+}
+
+.farley-detalle-card-action {
+  font-size:12px;
+  color:var(--clr-primary-dark);
+  font-weight:500;
+  margin-top:4px
+}
+
+.farley-detalle-back {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:8px 16px;
+  margin-bottom:16px;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:500;
+  color:var(--clr-primary-dark);
+  background:var(--clr-bg-light);
+  border:1px solid var(--clr-border);
+  transition:.15s ease;
+  user-select:none
+}
+
+.farley-detalle-back:hover {
+  background:var(--clr-border)
+}
+
+/* --- Login overlay --- */
+.login-overlay {
+  position: fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.7); display:flex; align-items:center;
+  justify-content:center; z-index:9999;
+}
+.login-card {
+  background:#fff; padding:40px 48px; border-radius:12px;
+  text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3);
+  max-width:360px; width:100%;
+}
+.login-card h2 { margin:0 0 4px; font-size:24px; color:#212121; }
+.login-subtitle { margin:0 0 24px; font-size:14px; color:#757575; }
+.login-input {
+  display:block; width:100%; padding:12px 14px; margin-bottom:16px;
+  border:1px solid #ccc; border-radius:6px; font-size:16px;
+  box-sizing:border-box; outline:none;
+}
+.login-input:focus { border-color:#1976d2; }
+.login-button {
+  width:100%; padding:12px; background:#1976d2; color:#fff;
+  border:none; border-radius:6px; font-size:16px; cursor:pointer;
+  font-family:inherit;
+}
+.login-button:hover { background:#1565c0; }
+.login-error { color:#d32f2f; font-size:14px; margin-top:12px; min-height:20px; }
+
+/* --- User badge in header --- */
+.user-badge {
+  display:inline-flex; align-items:center; gap:6px;
+  margin-left:12px; font-size:14px; color:#212121;
+}
+.user-separator { color:#ccc; margin:0 4px; }
+.btn-logout {
+  background:var(--clr-primary); color:#212121;
+  border:none; padding:4px 12px; border-radius:4px;
+  cursor:pointer; font-size:13px; font-family:inherit;
+}
+.btn-logout:hover { background:var(--clr-primary-hover); }

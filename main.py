@@ -2,6 +2,7 @@ import os
 import io
 import json
 import re
+import secrets
 import time
 import difflib
 from datetime import datetime, timezone, timedelta
@@ -10,8 +11,8 @@ from collections import defaultdict
 import openpyxl
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Body, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, Body, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client, Client
 from openpyxl import Workbook
@@ -24,6 +25,24 @@ AYUDAS_SUPABASE_URL = os.environ.get("AYUDAS_SUPABASE_URL") or os.environ["SUPAB
 AYUDAS_SUPABASE_KEY = os.environ.get("AYUDAS_SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_SERVICE_KEY"]
 INVENTARIO_SUPABASE_URL = os.environ.get("INVENTARIO_SUPABASE_URL") or os.environ["SUPABASE_URL"]
 INVENTARIO_SUPABASE_KEY = os.environ.get("INVENTARIO_SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_SERVICE_KEY"]
+
+# --- Auth ---
+_USERS = {}
+if os.getenv("PASSWORD_MARIA"):
+    _USERS["Maria"] = os.environ["PASSWORD_MARIA"]
+if os.getenv("PASSWORD_JEOVANI"):
+    _USERS["Jeovani"] = os.environ["PASSWORD_JEOVANI"]
+if os.getenv("PASSWORD_ANGEL"):
+    _USERS["Angel"] = os.environ["PASSWORD_ANGEL"]
+
+_SESSIONS = {}  # token -> {"expiry": float, "username": str}
+
+def _clean_sessions():
+    now = time.time()
+    expired = [k for k, v in _SESSIONS.items() if v["expiry"] < now]
+    for k in expired:
+        del _SESSIONS[k]
+# --- end Auth ---
 
 COL_TZ = timezone(timedelta(hours=-5))
 
@@ -113,6 +132,53 @@ supabase_inventario: Client = create_client(INVENTARIO_SUPABASE_URL, INVENTARIO_
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.post("/api/auth/login")
+async def auth_login(data: dict):
+    pwd = data.get("password", "")
+    username = None
+    for u, pw in _USERS.items():
+        if pw == pwd:
+            username = u
+            break
+    if not username:
+        raise HTTPException(401, "Contraseña incorrecta")
+    token = secrets.token_hex(32)
+    _SESSIONS[token] = {"expiry": time.time() + 86400, "username": username}
+    resp = JSONResponse({"ok": True, "username": username})
+    resp.set_cookie(key="session", value=token, httponly=True,
+                    samesite="lax", max_age=86400)
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    token = request.cookies.get("session")
+    _SESSIONS.pop(token, None)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session")
+    return resp
+
+
+@app.get("/api/auth/check")
+async def auth_check(request: Request):
+    token = request.cookies.get("session")
+    _clean_sessions()
+    if token and token in _SESSIONS:
+        return {"authenticated": True, "username": _SESSIONS[token]["username"]}
+    return {"authenticated": False}
+
+
+@app.middleware("http")
+async def session_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and not path.startswith("/api/auth/"):
+        token = request.cookies.get("session")
+        _clean_sessions()
+        if not token or token not in _SESSIONS:
+            return JSONResponse(status_code=401, content={"detail": "No autorizado"})
+    return await call_next(request)
 
 
 @app.get("/")

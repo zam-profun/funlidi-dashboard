@@ -140,6 +140,12 @@
       </span>
       <span class="tz-local-label" id="tzLocalLabel"></span>
       <span class="refresh-indicator" id="refreshIndicator"></span>
+      <span class="user-badge" id="userBadge" style="display:none">
+        <span class="material-icons" style="font-size:18px;vertical-align:middle">person</span>
+        <span id="userNameDisplay" style="vertical-align:middle"></span>
+        <span class="user-separator">|</span>
+        <button class="btn btn-logout" id="btnLogout">Cerrar sesión</button>
+      </span>
     </header>
 
     <section class="content-section active" id="section-registros">
@@ -717,6 +723,16 @@
       </div>
     </div>
 
+    <!-- Login overlay -->
+    <div id="loginOverlay" class="login-overlay">
+      <div class="login-card">
+        <h2>FUNLIDI Dashboard</h2>
+        <p class="login-subtitle">Ingrese la contraseña para acceder</p>
+        <input type="password" id="loginPassword" class="login-input" placeholder="Contraseña">
+        <button id="loginButton" class="login-button">Ingresar</button>
+        <p id="loginError" class="login-error"></p>
+      </div>
+    </div>
   </main>
 
   <script src="/static/script.js"></script>
