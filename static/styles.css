@@ -1787,6 +1787,38 @@ body {
   background:var(--clr-border)
 }
 
+/* --- Form divider --- */
+.form-divider {
+  font-size:13px; font-weight:700; color:#9E9E9E;
+  text-transform:uppercase; letter-spacing:0.5px;
+  padding:16px 0 8px; border-bottom:1px solid #F0F0F0;
+  margin-bottom:16px;
+}
+
+/* --- Beneficiario card in form --- */
+.beneficiario-card {
+  background:#FAFAFA; border:1px solid #E0E0E0;
+  border-radius:10px; padding:16px; margin-bottom:12px;
+}
+.beneficiario-header {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:12px; font-size:14px; font-weight:600; color:#424242;
+}
+.beneficiario-remove {
+  background:none; border:none; color:#EF5350;
+  font-size:22px; cursor:pointer; padding:2px 8px; border-radius:4px;
+  line-height:1;
+}
+.beneficiario-remove:hover { background:#FFEBEE; }
+.btn-add-benef {
+  background:var(--clr-bg-light); color:var(--clr-primary-dark);
+  border:1.5px dashed var(--clr-border); padding:8px 16px;
+  border-radius:8px; cursor:pointer; font-family:inherit;
+  font-size:13px; font-weight:500; display:inline-flex;
+  align-items:center; gap:4px; transition:.15s; margin-top:4px;
+}
+.btn-add-benef:hover { background:var(--clr-border); }
+
 /* --- Login overlay --- */
 .login-overlay {
   position: fixed; top:0; left:0; width:100%; height:100%;

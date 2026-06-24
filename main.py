@@ -752,6 +752,111 @@ async def download_ayudas_xlsx():
     )
 
 
+# ========== AYUDAS CRUD ENDPOINTS ==========
+
+
+AYUDAS_CRUD_FIELDS = AYUDAS_PERSONAL_FIELDS + AYUDAS_BANK_FIELDS
+
+
+def _next_ayudas_negative_id():
+    result = (
+        supabase_ayudas.table(AYUDAS_TABLE)
+        .select("telegram_user_id")
+        .lt("telegram_user_id", 0)
+        .order("telegram_user_id")
+        .execute()
+    )
+    existing = [r["telegram_user_id"] for r in (result.data or [])]
+    if not existing:
+        return -1
+    return min(existing) - 1
+
+
+@app.post("/api/ayudas/add")
+async def add_ayudas_entry(data: dict = Body(...)):
+    telegram_username = (data.get("telegram_username") or "").strip()
+    if not telegram_username:
+        telegram_username = "MANUAL"
+
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+
+    telegram_user_id = _next_ayudas_negative_id()
+    now = datetime.now(timezone.utc).isoformat()
+
+    row = {
+        "telegram_user_id": telegram_user_id,
+        "telegram_username": telegram_username,
+        "data_treatment_accepted": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    for k in AYUDAS_CRUD_FIELDS:
+        v = data.get(k)
+        row[k] = str(v).strip() if v and str(v).strip() else None
+
+    supabase_ayudas.table(AYUDAS_TABLE).upsert(row, on_conflict="telegram_user_id").execute()
+
+    # Handle beneficiaries: delete existing, insert new
+    beneficiarios = data.get("beneficiarios", [])
+    if beneficiarios:
+        supabase_ayudas.table(AYUDAS_BENEF_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
+        for i, b in enumerate(beneficiarios):
+            b_row = {"telegram_user_id": telegram_user_id, "beneficiary_number": i + 1}
+            for field in AYUDAS_PERSONAL_FIELDS:
+                v = b.get(field)
+                b_row[field] = str(v).strip() if v and str(v).strip() else None
+            b_row["created_at"] = now
+            b_row["updated_at"] = now
+            supabase_ayudas.table(AYUDAS_BENEF_TABLE).insert(b_row).execute()
+
+    return {"success": True, "data": row}
+
+
+@app.put("/api/ayudas/edit/{telegram_user_id}")
+async def edit_ayudas_entry(telegram_user_id: int, data: dict = Body(...)):
+    existing = supabase_ayudas.table(AYUDAS_TABLE).select("*").eq("telegram_user_id", telegram_user_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    row = {}
+    for k in AYUDAS_CRUD_FIELDS:
+        if k in data:
+            v = data[k]
+            row[k] = str(v).strip() if v and str(v).strip() else None
+
+    if "telegram_username" in data:
+        v = data["telegram_username"]
+        row["telegram_username"] = str(v).strip() if v and str(v).strip() else "MANUAL"
+
+    if row:
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        supabase_ayudas.table(AYUDAS_TABLE).update(row).eq("telegram_user_id", telegram_user_id).execute()
+
+    # Handle beneficiaries
+    if "beneficiarios" in data:
+        supabase_ayudas.table(AYUDAS_BENEF_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
+        now = datetime.now(timezone.utc).isoformat()
+        for i, b in enumerate(data["beneficiarios"]):
+            b_row = {"telegram_user_id": telegram_user_id, "beneficiary_number": i + 1}
+            for field in AYUDAS_PERSONAL_FIELDS:
+                v = b.get(field)
+                b_row[field] = str(v).strip() if v and str(v).strip() else None
+            b_row["created_at"] = now
+            b_row["updated_at"] = now
+            supabase_ayudas.table(AYUDAS_BENEF_TABLE).insert(b_row).execute()
+
+    return {"success": True}
+
+
+@app.delete("/api/ayudas/delete/{telegram_user_id}")
+async def delete_ayudas_entry(telegram_user_id: int):
+    supabase_ayudas.table(AYUDAS_BENEF_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
+    supabase_ayudas.table(AYUDAS_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
+    return {"success": True}
+
+
 # ========== INVENTARIO ENDPOINTS ==========
 
 INVENTARIO_TABLE = "inventario_adquisiciones"

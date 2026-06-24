@@ -433,6 +433,10 @@
           <option value="sin_banco">Sin banco (N/A)</option>
           <option value="incompleto">Incompleto</option>
         </select>
+        <button class="btn btn-add" id="btnAyudasAdd">
+          <span class="material-icons">add</span>
+          Añadir
+        </button>
         <span class="table-count" id="ayudasTableCount">0 registros</span>
       </div>
       <div class="table-wrapper">
@@ -478,6 +482,131 @@
         <p class="download-info" id="ayudasDownloadInfo"></p>
       </div>
     </section>
+
+    <!-- ========== AYUDAS MODALS ========== -->
+
+    <div class="modal-overlay" id="ayudasModalOverlay" style="display:none" onclick="closeAyudasModal(event)">
+      <div class="modal" id="ayudasModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">volunteer_activism</span>
+          <span class="modal-title" id="ayudasModalTitle">Añadir registro</span>
+          <span class="material-icons modal-close" onclick="closeAyudasModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="ayudasEditTelegramUserId" value="">
+
+          <div class="form-group">
+            <label class="form-label">Telegram @username <span class="form-label-hint">(opcional)</span></label>
+            <input type="text" id="ayudFormUsername" class="form-input" placeholder="@usuario">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="ayudFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cédula / DNI</label>
+              <input type="text" id="ayudFormDni" class="form-input" placeholder="Ej: 12345678">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">País</label>
+              <input type="text" id="ayudFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ciudad</label>
+              <input type="text" id="ayudFormCiudad" class="form-input" placeholder="Ej: BOGOTÁ">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pasaporte</label>
+              <input type="text" id="ayudFormPasaporte" class="form-input" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ocupación</label>
+              <input type="text" id="ayudFormOcupacion" class="form-input" placeholder="Opcional">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Teléfono</label>
+              <input type="text" id="ayudFormTelefono" class="form-input" placeholder="Ej: 3001234567">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Correo</label>
+              <input type="text" id="ayudFormCorreo" class="form-input" placeholder="Ej: correo@email.com">
+            </div>
+          </div>
+
+          <div class="form-divider">INFORMACIÓN BANCARIA</div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Banco</label>
+              <input type="text" id="ayudFormBanco" class="form-input" placeholder="Ej: BANCOLOMBIA">
+            </div>
+            <div class="form-group">
+              <label class="form-label">SWIFT</label>
+              <input type="text" id="ayudFormSwift" class="form-input" placeholder="Ej: COLOCOBM">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">N° Cuenta</label>
+              <input type="text" id="ayudFormNbancaria" class="form-input" placeholder="Ej: 123456789">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo Cuenta</label>
+              <select id="ayudFormTipocuenta" class="form-input" onchange="ayudasToggleOtroTipoCuenta()">
+                <option value="">—</option>
+                <option value="AHORROS">AHORROS</option>
+                <option value="CORRIENTE">CORRIENTE</option>
+                <option value="OTRA">OTRA</option>
+              </select>
+              <input type="text" id="ayudFormTipocuentaOtro" class="form-input" placeholder="Especifique..." style="display:none;margin-top:8px">
+            </div>
+          </div>
+
+          <div class="form-divider">BENEFICIARIOS <span class="form-label-hint">(máx. 10)</span></div>
+          <div id="ayudasBeneficiariosContainer"></div>
+          <button type="button" class="btn btn-sm btn-add-benef" onclick="ayudasAddBeneficiario()">
+            <span class="material-icons" style="font-size:16px">person_add</span>
+            Añadir beneficiario
+          </button>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" onclick="closeAyudasModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnAyudasModalSubmit" onclick="submitAyudasForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="ayudasDeleteOverlay" style="display:none" onclick="closeAyudasDeleteModal(event)">
+      <div class="modal modal-sm" id="ayudasDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar registro</span>
+          <span class="material-icons modal-close" onclick="closeAyudasDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">¿Seguro de eliminar?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acción no se puede deshacer. Los beneficiarios asociados también se eliminarán.</p>
+          <input type="hidden" id="ayudasDeleteTelegramUserId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeAyudasDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeAyudasDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ========== INVENTARIO SECTIONS ========== -->
 

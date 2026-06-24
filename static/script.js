@@ -814,6 +814,7 @@ function initAyudasSearch() {
   document.getElementById("ayudasSearchInput").addEventListener("input", renderAyudasTable);
   document.getElementById("ayudasPaisFilter").addEventListener("change", renderAyudasTable);
   document.getElementById("ayudasEstadoFilter").addEventListener("change", renderAyudasTable);
+  document.getElementById("btnAyudasAdd").addEventListener("click", openAyudasAddModal);
 }
 
 function initAyudasDownload() {
@@ -933,6 +934,14 @@ function buildAyudasDetailHtml(r, idx) {
           <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
           <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
         </div>
+      </div>
+      <div class="inventario-detail-actions">
+        <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openAyudasEditModal(${r.telegram_user_id})">
+          <span class="material-icons" style="font-size:16px">edit</span> Editar
+        </button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();openAyudasDeleteModal(${r.telegram_user_id})">
+          <span class="material-icons" style="font-size:16px">delete</span> Eliminar
+        </button>
       </div>
     </div>`;
 }
@@ -1084,6 +1093,299 @@ async function loadAyudasStats() {
     el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
   }
 }
+
+
+// ========== AYUDAS CRUD FUNCTIONS ==========
+
+
+function openAyudasAddModal() {
+  document.getElementById("ayudasEditTelegramUserId").value = "";
+  document.getElementById("ayudasModalTitle").textContent = "Añadir registro";
+  document.getElementById("ayudFormUsername").value = "";
+  document.getElementById("ayudFormNombre").value = "";
+  document.getElementById("ayudFormDni").value = "";
+  document.getElementById("ayudFormPais").value = "";
+  document.getElementById("ayudFormCiudad").value = "";
+  document.getElementById("ayudFormPasaporte").value = "";
+  document.getElementById("ayudFormOcupacion").value = "";
+  document.getElementById("ayudFormTelefono").value = "";
+  document.getElementById("ayudFormCorreo").value = "";
+  document.getElementById("ayudFormBanco").value = "";
+  document.getElementById("ayudFormSwift").value = "";
+  document.getElementById("ayudFormNbancaria").value = "";
+  document.getElementById("ayudFormTipocuenta").value = "";
+  document.getElementById("ayudFormTipocuentaOtro").value = "";
+  document.getElementById("ayudFormTipocuentaOtro").style.display = "none";
+  document.getElementById("btnAyudasModalSubmit").textContent = "Guardar";
+  document.getElementById("ayudasBeneficiariosContainer").innerHTML = "";
+  document.getElementById("ayudasModalOverlay").style.display = "flex";
+}
+
+
+function openAyudasEditModal(telegramUserId) {
+  const r = ayudasAllData.find(function(item) { return item.telegram_user_id === telegramUserId; });
+  if (!r) return;
+
+  document.getElementById("ayudasEditTelegramUserId").value = telegramUserId;
+  document.getElementById("ayudasModalTitle").textContent = "Editar registro";
+  document.getElementById("ayudFormUsername").value = r.telegram_username || "";
+  document.getElementById("ayudFormNombre").value = r.nombre || "";
+  document.getElementById("ayudFormDni").value = r.dni || "";
+  document.getElementById("ayudFormPais").value = r.pais || "";
+  document.getElementById("ayudFormCiudad").value = r.ciudad || "";
+  document.getElementById("ayudFormPasaporte").value = r.pasaporte || "";
+  document.getElementById("ayudFormOcupacion").value = r.ocupacion || "";
+  document.getElementById("ayudFormTelefono").value = r.telefono || "";
+  document.getElementById("ayudFormCorreo").value = r.correo || "";
+  document.getElementById("ayudFormBanco").value = r.banco || "";
+  document.getElementById("ayudFormSwift").value = r.swift || "";
+  document.getElementById("ayudFormNbancaria").value = r.nbancaria || "";
+  var tipocuenta = r.tipocuenta || "";
+  if (tipocuenta === "AHORROS" || tipocuenta === "CORRIENTE" || tipocuenta === "OTRA") {
+    document.getElementById("ayudFormTipocuenta").value = tipocuenta;
+    document.getElementById("ayudFormTipocuentaOtro").value = "";
+    document.getElementById("ayudFormTipocuentaOtro").style.display = "none";
+  } else if (tipocuenta && tipocuenta !== "—") {
+    document.getElementById("ayudFormTipocuenta").value = "OTRA";
+    document.getElementById("ayudFormTipocuentaOtro").value = tipocuenta;
+    document.getElementById("ayudFormTipocuentaOtro").style.display = "";
+  } else {
+    document.getElementById("ayudFormTipocuenta").value = "";
+    document.getElementById("ayudFormTipocuentaOtro").value = "";
+    document.getElementById("ayudFormTipocuentaOtro").style.display = "none";
+  }
+  document.getElementById("btnAyudasModalSubmit").textContent = "Actualizar";
+
+  // Build beneficiary cards
+  var container = document.getElementById("ayudasBeneficiariosContainer");
+  container.innerHTML = "";
+  var benefs = r.beneficiarios || [];
+  for (var i = 0; i < benefs.length; i++) {
+    ayudasAddBeneficiario(benefs[i]);
+  }
+
+  document.getElementById("ayudasModalOverlay").style.display = "flex";
+}
+
+
+function closeAyudasModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("ayudasModalOverlay").style.display = "none";
+}
+
+
+function getAyudasFormData() {
+  var tipocuenta = document.getElementById("ayudFormTipocuenta").value;
+  if (tipocuenta === "OTRA") {
+    var otroVal = document.getElementById("ayudFormTipocuentaOtro").value.trim();
+    if (otroVal) tipocuenta = otroVal;
+  }
+
+  // Collect beneficiaries
+  var container = document.getElementById("ayudasBeneficiariosContainer");
+  var benefCards = container.querySelectorAll(".beneficiario-card");
+  var beneficiarios = [];
+  for (var i = 0; i < benefCards.length; i++) {
+    var card = benefCards[i];
+    beneficiarios.push({
+      nombre: (card.querySelector('[name="benef-nombre"]') || {}).value || "",
+      dni: (card.querySelector('[name="benef-dni"]') || {}).value || "",
+      pais: (card.querySelector('[name="benef-pais"]') || {}).value || "",
+      ciudad: (card.querySelector('[name="benef-ciudad"]') || {}).value || "",
+      pasaporte: (card.querySelector('[name="benef-pasaporte"]') || {}).value || "",
+      ocupacion: (card.querySelector('[name="benef-ocupacion"]') || {}).value || "",
+      telefono: (card.querySelector('[name="benef-telefono"]') || {}).value || "",
+      correo: (card.querySelector('[name="benef-correo"]') || {}).value || "",
+    });
+  }
+
+  return {
+    telegram_username: document.getElementById("ayudFormUsername").value.trim(),
+    nombre: document.getElementById("ayudFormNombre").value.trim(),
+    dni: document.getElementById("ayudFormDni").value.trim(),
+    pais: document.getElementById("ayudFormPais").value.trim(),
+    ciudad: document.getElementById("ayudFormCiudad").value.trim(),
+    pasaporte: document.getElementById("ayudFormPasaporte").value.trim(),
+    ocupacion: document.getElementById("ayudFormOcupacion").value.trim(),
+    telefono: document.getElementById("ayudFormTelefono").value.trim(),
+    correo: document.getElementById("ayudFormCorreo").value.trim(),
+    banco: document.getElementById("ayudFormBanco").value.trim(),
+    swift: document.getElementById("ayudFormSwift").value.trim(),
+    nbancaria: document.getElementById("ayudFormNbancaria").value.trim(),
+    tipocuenta: tipocuenta,
+    beneficiarios: beneficiarios,
+  };
+}
+
+
+async function submitAyudasForm() {
+  var nombre = document.getElementById("ayudFormNombre").value.trim();
+  if (!nombre) {
+    alert("El campo Nombres y Apellidos es obligatorio.");
+    document.getElementById("ayudFormNombre").focus();
+    return;
+  }
+
+  var btn = document.getElementById("btnAyudasModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    var editId = document.getElementById("ayudasEditTelegramUserId").value;
+    var data = getAyudasFormData();
+    var url, method;
+
+    if (editId) {
+      url = "/api/ayudas/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/ayudas/add";
+      method = "POST";
+    }
+
+    var resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!resp.ok) {
+      var errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al guardar");
+    }
+
+    closeAyudasModal();
+    ayudasExpandedRow = null;
+    await loadAyudasRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = document.getElementById("ayudasEditTelegramUserId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+
+function openAyudasDeleteModal(telegramUserId) {
+  document.getElementById("ayudasDeleteTelegramUserId").value = telegramUserId;
+  document.getElementById("ayudasDeleteOverlay").style.display = "flex";
+}
+
+
+function closeAyudasDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("ayudasDeleteOverlay").style.display = "none";
+}
+
+
+async function executeAyudasDelete() {
+  var telegramUserId = document.getElementById("ayudasDeleteTelegramUserId").value;
+  if (!telegramUserId) return;
+
+  var btn = document.querySelector("#ayudasDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+
+  try {
+    var resp = await fetch("/api/ayudas/delete/" + telegramUserId, {
+      method: "DELETE",
+    });
+
+    if (!resp.ok) throw new Error("Error al eliminar");
+
+    closeAyudasDeleteModal();
+    ayudasExpandedRow = null;
+    await loadAyudasRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
+  }
+}
+
+
+function ayudasAddBeneficiario(data) {
+  var container = document.getElementById("ayudasBeneficiariosContainer");
+  var count = container.querySelectorAll(".beneficiario-card").length;
+  if (count >= 10) {
+    alert("Máximo 10 beneficiarios.");
+    return;
+  }
+  var idx = count;
+
+  var div = document.createElement("div");
+  div.className = "beneficiario-card";
+  div.dataset.idx = idx;
+
+  var n = data ? (data.nombre || "") : "";
+  var d = data ? (data.dni || "") : "";
+  var p = data ? (data.pais || "") : "";
+  var c = data ? (data.ciudad || "") : "";
+  var pas = data ? (data.pasaporte || "") : "";
+  var o = data ? (data.ocupacion || "") : "";
+  var t = data ? (data.telefono || "") : "";
+  var e = data ? (data.correo || "") : "";
+
+  div.innerHTML =
+    '<div class="beneficiario-header">' +
+      '<span>Beneficiario #' + (idx + 1) + '</span>' +
+      '<button type="button" class="beneficiario-remove" onclick="ayudasRemoveBeneficiario(this)">&times;</button>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<input class="form-input" name="benef-nombre" placeholder="Nombre" value="' + escHtml(n) + '">' +
+      '<input class="form-input" name="benef-dni" placeholder="DNI" value="' + escHtml(d) + '">' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<input class="form-input" name="benef-pais" placeholder="País" value="' + escHtml(p) + '">' +
+      '<input class="form-input" name="benef-ciudad" placeholder="Ciudad" value="' + escHtml(c) + '">' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<input class="form-input" name="benef-pasaporte" placeholder="Pasaporte" value="' + escHtml(pas) + '">' +
+      '<input class="form-input" name="benef-ocupacion" placeholder="Ocupación" value="' + escHtml(o) + '">' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<input class="form-input" name="benef-telefono" placeholder="Teléfono" value="' + escHtml(t) + '">' +
+      '<input class="form-input" name="benef-correo" placeholder="Correo" value="' + escHtml(e) + '">' +
+    '</div>';
+
+  container.appendChild(div);
+  renumberBeneficiarios();
+}
+
+
+function ayudasRemoveBeneficiario(btn) {
+  var card = btn.closest(".beneficiario-card");
+  if (card) {
+    card.remove();
+    renumberBeneficiarios();
+  }
+}
+
+
+function renumberBeneficiarios() {
+  var container = document.getElementById("ayudasBeneficiariosContainer");
+  var cards = container.querySelectorAll(".beneficiario-card");
+  for (var i = 0; i < cards.length; i++) {
+    var hdr = cards[i].querySelector(".beneficiario-header span:first-child");
+    if (hdr) hdr.textContent = "Beneficiario #" + (i + 1);
+  }
+}
+
+
+function ayudasToggleOtroTipoCuenta() {
+  var sel = document.getElementById("ayudFormTipocuenta");
+  var otro = document.getElementById("ayudFormTipocuentaOtro");
+  otro.style.display = sel.value === "OTRA" ? "" : "none";
+  if (sel.value !== "OTRA") otro.value = "";
+}
+
+
+function escHtml(str) {
+  if (!str) return "";
+  return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 
 setInterval(tickRefreshIndicator, 5000);
 
