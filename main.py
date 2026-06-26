@@ -857,6 +857,16 @@ async def delete_ayudas_entry(telegram_user_id: int):
     return {"success": True}
 
 
+@app.put("/api/ayudas/toggle-benef-approval/{telegram_user_id}")
+async def toggle_ayudas_benef_approval(telegram_user_id: int):
+    result = supabase_ayudas.table(AYUDAS_TABLE).select("beneficiarios_autorizado").eq("telegram_user_id", telegram_user_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    current = result.data[0].get("beneficiarios_autorizado", False)
+    supabase_ayudas.table(AYUDAS_TABLE).update({"beneficiarios_autorizado": not current}).eq("telegram_user_id", telegram_user_id).execute()
+    return {"success": True, "autorizado": not current}
+
+
 # ========== INVENTARIO ENDPOINTS ==========
 
 INVENTARIO_TABLE = "inventario_adquisiciones"

@@ -943,6 +943,20 @@ function buildAyudasDetailHtml(r, idx) {
           <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
         </div>
       </div>
+      <div class="ayudas-detail-section" style="border-bottom:none">
+        <div class="ayudas-detail-title" style="font-size:13px">
+          <span class="material-icons" style="font-size:18px">security</span>
+          AUTORIZACI&Oacute;N BENEFICIARIOS
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:6px 0">
+          <span style="font-size:13px">Permitir agregar beneficiarios desde el bot</span>
+          <label class="toggle-switch">
+            <input type="checkbox" ${r.beneficiarios_autorizado ? 'checked' : ''} onchange="toggleBenefApproval(${r.telegram_user_id}, this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span style="font-size:12px;color:#9E9E9E" id="benefApprovalStatus-${r.telegram_user_id}">${r.beneficiarios_autorizado ? 'Autorizado' : 'No autorizado'}</span>
+        </div>
+      </div>
       <div class="inventario-detail-actions">
         <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openAyudasEditModal(${r.telegram_user_id})">
           <span class="material-icons" style="font-size:16px">edit</span> Editar
@@ -1392,6 +1406,16 @@ function ayudasToggleOtroTipoCuenta() {
 function escHtml(str) {
   if (!str) return "";
   return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+
+async function toggleBenefApproval(telegramUserId, checked) {
+  try {
+    await fetch("/api/ayudas/toggle-benef-approval/" + telegramUserId, { method: "PUT" });
+    await loadAyudasRegistros();
+  } catch (err) {
+    alert("Error al cambiar autorización.");
+  }
 }
 
 
@@ -2656,11 +2680,3 @@ function buildVerificacionCard(p) {
   );
 }
 
-
-// ========== ESCAPE HTML HELPER ==========
-
-
-function escHtml(str) {
-  if (!str) return "";
-  return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
