@@ -34,6 +34,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-verificacion {
+  --clr-primary: #4DB6AC;
+  --clr-primary-rgb: 77, 182, 172;
+  --clr-primary-hover: #26A69A;
+  --clr-primary-dark: #00897B;
+  --clr-bg-light: #E0F2F1;
+  --clr-bg-hover: #B2DFDB;
+  --clr-border: #B2DFDB;
+  --clr-header-border: #B2DFDB;
+  --clr-warning: #F57F17;
+}
+
 .theme-farley {
   --clr-primary: #9575CD;
   --clr-primary-rgb: 149, 117, 205;
@@ -1858,3 +1870,74 @@ body {
   cursor:pointer; font-size:13px; font-family:inherit;
 }
 .btn-logout:hover { background:var(--clr-primary-hover); }
+
+/* --- Verification cards --- */
+.verif-results {
+  display:flex; flex-direction:column; gap:16px; margin-top:16px;
+}
+.verif-card {
+  background:#FAFAFA; border:1px solid #E0E0E0;
+  border-radius:12px; overflow:hidden;
+}
+.verif-card-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:14px 18px; background:#fff;
+  border-bottom:1px solid #E0E0E0;
+}
+.verif-card-info {
+  display:flex; flex-direction:column; gap:2px;
+}
+.verif-card-name {
+  font-size:15px; color:#212121;
+}
+.verif-card-cedula, .verif-card-telegram {
+  font-size:12px; color:#9E9E9E;
+}
+.verif-badge {
+  padding:4px 12px; border-radius:20px; font-size:11px;
+  font-weight:700; text-transform:uppercase; white-space:nowrap;
+}
+.verif-badge-both { background:#E8F5E9; color:#2E7D32; }
+.verif-badge-farley { background:#E3F2FD; color:#1565C0; }
+.verif-badge-inv { background:#FFF3E0; color:#E65100; }
+
+/* --- Comparison header row --- */
+.verif-compare-header {
+  display:grid;
+  grid-template-columns:1fr 80px 80px 40px;
+  gap:8px;
+  padding:10px 18px;
+  background:#F5F5F5;
+  border-bottom:1px solid #E0E0E0;
+  align-items:center;
+  font-size:12px;
+  color:#757575;
+}
+
+/* --- Comparison row --- */
+.verif-row {
+  display:grid;
+  grid-template-columns:1fr 80px 80px 40px;
+  gap:8px;
+  padding:8px 18px;
+  align-items:center;
+  font-size:13px;
+  border-bottom:1px solid #F5F5F5;
+}
+.verif-row:last-child { border-bottom:none; }
+.verif-row-detail {
+  padding-top:0; padding-bottom:4px; font-size:11px; color:#9E9E9E;
+  grid-template-columns:1fr 80px 80px 40px;
+}
+.verif-label { color:#424242; }
+.verif-value { font-weight:600; text-align:center; }
+.verif-value-farley { color:#1976D2; }
+.verif-value-inv { color:#388E3C; }
+.verif-status { text-align:center; display:flex; justify-content:center; }
+.verif-detail { color:#9E9E9E; font-size:11px; }
+
+/* --- Status colors --- */
+.verif-ok { color:#2E7D32; }
+.verif-mismatch { color:#C62828; }
+.verif-only { color:#E65100; }
+.verif-absent { color:#BDBDBD; }

@@ -20,6 +20,7 @@
           <option value="inventario">BOT - INVENTARIO</option>
           <option value="consulta">CONSULTA GENERAL</option>
           <option value="farley">B. DATOS - FARLEY</option>
+          <option value="verificacion">VERIFICACIÓN</option>
         </select>
       </div>
     </div>
@@ -117,6 +118,20 @@
       <button class="nav-btn" data-section="farley-detalle">
         <span class="material-icons">search</span>
         <span>Detalle</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-verificacion" style="display:none">
+      <button class="nav-btn active" data-section="verificacion-resumen">
+        <span class="material-icons">dashboard</span>
+        <span>Resumen</span>
+      </button>
+      <button class="nav-btn" data-section="verificacion-busqueda">
+        <span class="material-icons">search</span>
+        <span>B&uacute;squeda</span>
+      </button>
+      <button class="nav-btn" data-section="verificacion-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -480,6 +495,48 @@
           Descargar XLSX
         </button>
         <p class="download-info" id="ayudasDownloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== VERIFICACION SECTIONS ========== -->
+
+    <section class="content-section" id="section-verificacion-resumen">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Comparaci&oacute;n entre la base de datos FARLEY y el bot de INVENTARIO. Muestra qui&eacute;nes tienen datos en ambos, diferencias por material y personas que solo aparecen en una fuente.</p>
+      </div>
+      <div class="stats-grid" id="verificacionStatsGrid"></div>
+    </section>
+
+    <section class="content-section" id="section-verificacion-busqueda">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Busque una persona por nombre, c&eacute;dula o telegram para ver la comparaci&oacute;n detallada entre FARLEY e INVENTARIO.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="verifSearchInput" placeholder="Buscar por nombre, cédula o telegram..." class="search-input">
+        </div>
+        <button class="btn btn-refresh" id="btnVerifSearch" style="background:var(--clr-primary);color:#212121">
+          <span class="material-icons">search</span>
+          Buscar
+        </button>
+        <span class="table-count" id="verifTableCount"></span>
+      </div>
+      <div id="verifResults" class="verif-results"></div>
+    </section>
+
+    <section class="content-section" id="section-verificacion-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar informe de verificaci&oacute;n</h3>
+        <p class="download-desc">Se descargar&aacute; un archivo de Excel con la comparaci&oacute;n completa entre FARLEY e INVENTARIO, incluyendo todos los materiales y diferencias.</p>
+        <button class="btn btn-download" id="btnVerifDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="verifDownloadInfo"></p>
       </div>
     </section>
 

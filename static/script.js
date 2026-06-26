@@ -66,6 +66,7 @@ function initializeApp() {
   initConsultaSearch();
   initTimezone();
   initFarleySearch();
+  initVerificacionSearch();
 
   loadSection("registros");
   startAutoRefresh();
@@ -99,12 +100,14 @@ function switchModule(module) {
   document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
   document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
   document.getElementById("nav-farley").style.display = module === "farley" ? "" : "none";
+  document.getElementById("nav-verificacion").style.display = module === "verificacion" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
   document.body.classList.toggle("theme-inventario", module === "inventario");
   document.body.classList.toggle("theme-farley", module === "farley");
+  document.body.classList.toggle("theme-verificacion", module === "verificacion");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -143,6 +146,9 @@ function switchSection(section) {
     "farley-promociones": "Promociones - B. DATOS FARLEY",
     "farley-graficos": "Gr&aacute;ficos - B. DATOS FARLEY",
     "farley-detalle": "Detalle - B. DATOS FARLEY",
+    "verificacion-resumen": "Resumen - Verificación",
+    "verificacion-busqueda": "Búsqueda - Verificación",
+    "verificacion-descargar": "Descargar - Verificación",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -166,6 +172,8 @@ function loadSection(section) {
   if (section === "farley-promociones") loadFarleyPromociones();
   if (section === "farley-graficos") loadFarleyGraficos();
   if (section === "farley-detalle") loadFarleyDetalle();
+  if (section === "verificacion-resumen") loadVerificacionResumen();
+  if (section === "verificacion-busqueda") loadVerificacionBusqueda();
 }
 
 function startAutoRefresh() {
@@ -2489,4 +2497,170 @@ function farleyBuildDetailView(member) {
 
   html += "</div></div>";
   return html;
+}
+
+
+// ========== VERIFICACION FUNCTIONS ==========
+
+
+function initVerificacionSearch() {
+  document.getElementById("btnVerifSearch").addEventListener("click", searchVerificacion);
+  document.getElementById("verifSearchInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") searchVerificacion();
+  });
+}
+
+
+async function loadVerificacionResumen() {
+  var el = document.getElementById("verificacionStatsGrid");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+
+  try {
+    var resp = await fetch("/api/verificacion");
+    if (!resp.ok) throw new Error("Error");
+    var d = await resp.json();
+    var s = d.stats;
+
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + s.matched + '</span><span class="stat-label">En ambas bases</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">person_search</span><div class="stat-info"><span class="stat-value">' + s.only_farley + '</span><span class="stat-label">Solo en FARLEY</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">person_search</span><div class="stat-info"><span class="stat-value">' + s.only_inventario + '</span><span class="stat-label">Solo en INVENTARIO</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">groups</span><div class="stat-info"><span class="stat-value">' + s.total_farley + '</span><span class="stat-label">Total FARLEY</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">inventory</span><div class="stat-info"><span class="stat-value">' + s.total_inventario + '</span><span class="stat-label">Total INVENTARIO</span></div></div>' +
+      '<div class="stat-card" style="border-color:#E53935"><span class="material-icons stat-icon" style="color:#E53935">sync_problem</span><div class="stat-info"><span class="stat-value" style="color:#E53935">' + s.mismatch_total + '</span><span class="stat-label">Discrepancias totales</span></div></div>' +
+      '<div class="stat-card" style="border-color:#E53935"><span class="material-icons stat-icon" style="color:#E53935">money_off</span><div class="stat-info"><span class="stat-value" style="color:#E53935">' + s.mismatch_dinar + '</span><span class="stat-label">Diferencias en Dinares</span></div></div>' +
+      '<div class="stat-card" style="border-color:#E53935"><span class="material-icons stat-icon" style="color:#E53935">circle</span><div class="stat-info"><span class="stat-value" style="color:#E53935">' + s.mismatch_oro + '</span><span class="stat-label">Diferencias en Oro</span></div></div>';
+
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}
+
+
+function loadVerificacionBusqueda() {
+  document.getElementById("verifResults").innerHTML = "";
+  document.getElementById("verifTableCount").textContent = "";
+}
+
+
+async function searchVerificacion() {
+  var q = document.getElementById("verifSearchInput").value.trim();
+  if (!q) return;
+
+  var results = document.getElementById("verifResults");
+  var count = document.getElementById("verifTableCount");
+  results.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Buscando...</p></div>';
+  count.textContent = "";
+
+  try {
+    var resp = await fetch("/api/verificacion?q=" + encodeURIComponent(q));
+    if (!resp.ok) throw new Error("Error");
+    var d = await resp.json();
+
+    count.textContent = d.total + " resultado" + (d.total !== 1 ? "s" : "");
+
+    if (d.total === 0) {
+      results.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">search_off</span><p>No se encontraron resultados para "' + escHtml(q) + '"</p></div>';
+      return;
+    }
+
+    var html = "";
+    for (var i = 0; i < d.persons.length; i++) {
+      html += buildVerificacionCard(d.persons[i]);
+    }
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al buscar.</p></div>';
+  }
+}
+
+
+function buildVerificacionCard(p) {
+  var matchTypeLabel, matchTypeClass;
+  if (p.match_type === "both") {
+    matchTypeLabel = "AMBOS";
+    matchTypeClass = "verif-badge-both";
+  } else if (p.match_type === "farley_only") {
+    matchTypeLabel = "SOLO FARLEY";
+    matchTypeClass = "verif-badge-farley";
+  } else {
+    matchTypeLabel = "SOLO INVENTARIO";
+    matchTypeClass = "verif-badge-inv";
+  }
+
+  var name = p.name || "—";
+  var cedula = p.cedula || "";
+  var telegram = p.telegram || "";
+
+  var compRows = "";
+  for (var i = 0; i < p.comparison.length; i++) {
+    var c = p.comparison[i];
+    var fVal = c.farley !== null && c.farley !== undefined ? c.farley : "—";
+    var iVal = c.inventario !== null && c.inventario !== undefined ? c.inventario : "—";
+
+    var statusIcon, statusClass;
+    if (c.status === "ok") {
+      statusIcon = "check_circle";
+      statusClass = "verif-ok";
+    } else if (c.status === "mismatch") {
+      statusIcon = "cancel";
+      statusClass = "verif-mismatch";
+    } else if (c.status === "only_farley") {
+      statusIcon = "arrow_back";
+      statusClass = "verif-only";
+    } else if (c.status === "only_inv") {
+      statusIcon = "arrow_forward";
+      statusClass = "verif-only";
+    } else {
+      statusIcon = "remove_circle_outline";
+      statusClass = "verif-absent";
+    }
+
+    compRows +=
+      '<div class="verif-row">' +
+        '<span class="verif-label">' + c.label + '</span>' +
+        '<span class="verif-value verif-value-farley">' + fVal + '</span>' +
+        '<span class="verif-value verif-value-inv">' + iVal + '</span>' +
+        '<span class="verif-status ' + statusClass + '"><span class="material-icons" style="font-size:16px">' + statusIcon + '</span></span>' +
+      '</div>';
+
+    if (c.detail) {
+      compRows +=
+        '<div class="verif-row verif-row-detail">' +
+          '<span class="verif-label"></span>' +
+          '<span class="verif-detail">' + c.detail + '</span>' +
+          '<span></span><span></span>' +
+        '</div>';
+    }
+  }
+
+  return (
+    '<div class="verif-card">' +
+      '<div class="verif-card-header">' +
+        '<div class="verif-card-info">' +
+          '<strong class="verif-card-name">' + escHtml(name) + '</strong>' +
+          (cedula ? '<span class="verif-card-cedula">' + escHtml(cedula) + '</span>' : '') +
+          (telegram ? '<span class="verif-card-telegram">' + escHtml(telegram) + '</span>' : '') +
+        '</div>' +
+        '<span class="verif-badge ' + matchTypeClass + '">' + matchTypeLabel + '</span>' +
+      '</div>' +
+      '<div class="verif-compare-header">' +
+        '<span class="verif-label" style="font-weight:700">Material</span>' +
+        '<span class="verif-value" style="font-weight:700;color:#1976D2">FARLEY</span>' +
+        '<span class="verif-value" style="font-weight:700;color:#4CAF50">INVENTARIO</span>' +
+        '<span class="verif-status" style="font-weight:700">¿OK?</span>' +
+      '</div>' +
+      compRows +
+    '</div>'
+  );
+}
+
+
+// ========== ESCAPE HTML HELPER ==========
+
+
+function escHtml(str) {
+  if (!str) return "";
+  return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

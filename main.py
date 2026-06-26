@@ -1293,3 +1293,208 @@ async def get_consulta(q: str = ""):
     result_list.sort(key=lambda p: p["name"] or "")
 
     return {"query": q, "total": len(result_list), "persons": result_list}
+
+
+# ========== VERIFICACION ENDPOINT ==========
+
+
+@app.get("/api/verificacion")
+async def get_verificacion(q: str = ""):
+    crm = _load_crm_data()
+    inv_result = supabase_inventario.table(INVENTARIO_TABLE).select("*").execute()
+    inventario = inv_result.data or []
+
+    # Build INVENTARIO lookup
+    inv_by_dni = defaultdict(list)
+    inv_by_tg = defaultdict(list)
+    for r in inventario:
+        dni = (r.get("dni") or "").strip().upper()
+        if dni:
+            inv_by_dni[dni].append(r)
+        tg = (r.get("telegram_username") or "").strip().lower()
+        if tg:
+            inv_by_tg[tg].append(r)
+
+    matched_inv_ids = set()
+    persons = []
+
+    for m in (crm or {}).get("members", []):
+        name = m.get("name", "") or ""
+        cedula = (m.get("cedula") or "").strip().upper()
+        telegram_handle = (m.get("telegram") or "").strip().lower().lstrip("@")
+
+        inv_recs = []
+        match_source = None
+
+        if cedula and cedula in inv_by_dni:
+            inv_recs.extend(inv_by_dni[cedula])
+            match_source = "cedula"
+
+        if telegram_handle and telegram_handle in inv_by_tg:
+            for ir in inv_by_tg[telegram_handle]:
+                if ir not in inv_recs:
+                    inv_recs.append(ir)
+            if not match_source:
+                match_source = "telegram"
+
+        if not inv_recs and name:
+            name_upper = name.upper().strip()
+            for r in inventario:
+                inv_name = (r.get("nombre") or "").upper().strip()
+                if inv_name and (inv_name == name_upper or inv_name in name_upper or name_upper in inv_name):
+                    if r not in inv_recs:
+                        inv_recs.append(r)
+                        match_source = "name"
+                        break
+
+        for ir in inv_recs:
+            matched_inv_ids.add(ir.get("telegram_user_id"))
+
+        # Compute FARLEY totals
+        farley = {
+            "present": True,
+            "dinar_qty": 0,
+            "gold_qty": 0,
+            "gold_grams": 0,
+            "membership_qty": 0,
+            "card_qty": 0,
+            "vaquita_count": 0,
+            "bonus_count": 0,
+            "purchase_count": m.get("purchase_count", 0),
+            "total_spent": m.get("total_spent", 0),
+        }
+        for p in m.get("purchases", []):
+            farley["dinar_qty"] += p.get("dinar_qty", 0) or 0
+            farley["gold_qty"] += p.get("gold_qty", 0) or 0
+            ggrams = p.get("gold_grams") or 0
+            if ggrams and ggrams > farley["gold_grams"]:
+                farley["gold_grams"] = ggrams
+            farley["membership_qty"] += p.get("membership_qty", 0) or 0
+            farley["card_qty"] += p.get("card_qty", 0) or 0
+            tags = p.get("tags", []) or []
+            if "vaquita" in tags:
+                farley["vaquita_count"] += 1
+            if "bonus" in tags:
+                farley["bonus_count"] += 1
+
+        # Compute INVENTARIO totals
+        inv = {
+            "present": len(inv_recs) > 0,
+            "cajadinar": 0,
+            "cajamicro": 0,
+            "per_aleman": 0,
+            "per_top": 0,
+            "per_dragon": 0,
+        }
+        for ir in inv_recs:
+            inv["cajadinar"] += int(ir.get("cajadinar") or 0)
+            inv["cajamicro"] += int(ir.get("cajamicro") or 0)
+            inv["per_aleman"] += int(ir.get("per_aleman") or 0)
+            inv["per_top"] += int(ir.get("per_top") or 0)
+            inv["per_dragon"] += int(ir.get("per_dragon") or 0)
+
+        # Build comparison
+        ggrams = farley.get("gold_grams", 0)
+        comparison = [
+            _verif_row("cajadinar", "Cajas Dinares Rojos", farley["dinar_qty"], inv["cajadinar"]),
+            _verif_row("cajamicro", "Cajas Microlingotes Oro", farley["gold_qty"], inv["cajamicro"], detail=f"{ggrams}gr" if farley["gold_qty"] > 0 and ggrams > 0 else None),
+        ]
+        for key, label in [("per_aleman", "Pergaminos Alemanes"), ("per_top", "Perg. Top Nonillon"), ("per_dragon", "Perg. Dragones Amarillos")]:
+            comparison.append(_verif_row(key, label, None, inv.get(key, 0)))
+        for key, label, fv in [("membership", "Membresías", farley["membership_qty"]),
+                                ("card", "Tarjetas Prepago", farley["card_qty"]),
+                                ("vaquita", "Compras Vaquita", farley["vaquita_count"]),
+                                ("bonus", "Bonos", farley["bonus_count"])]:
+            comparison.append(_verif_row(key, label, fv, None))
+
+        persons.append({
+            "name": name,
+            "cedula": m.get("cedula", ""),
+            "telegram": m.get("telegram", ""),
+            "match_type": "both" if inv["present"] else "farley_only",
+            "match_source": match_source,
+            "farley": farley,
+            "inventario": inv,
+            "comparison": comparison,
+        })
+
+    # Add unmatched INVENTARIO records
+    for r in inventario:
+        if r.get("telegram_user_id") in matched_inv_ids:
+            continue
+        inv = {
+            "present": True,
+            "cajadinar": int(r.get("cajadinar") or 0),
+            "cajamicro": int(r.get("cajamicro") or 0),
+            "per_aleman": int(r.get("per_aleman") or 0),
+            "per_top": int(r.get("per_top") or 0),
+            "per_dragon": int(r.get("per_dragon") or 0),
+        }
+        comparison = [
+            _verif_row("cajadinar", "Cajas Dinares Rojos", None, inv["cajadinar"]),
+            _verif_row("cajamicro", "Cajas Microlingotes Oro", None, inv["cajamicro"]),
+        ]
+        for key, label in [("per_aleman", "Pergaminos Alemanes"), ("per_top", "Perg. Top Nonillon"), ("per_dragon", "Perg. Dragones Amarillos")]:
+            comparison.append(_verif_row(key, label, None, inv.get(key, 0)))
+        for key, label in [("membership", "Membresías"), ("card", "Tarjetas Prepago"),
+                           ("vaquita", "Compras Vaquita"), ("bonus", "Bonos")]:
+            comparison.append(_verif_row(key, label, None, None))
+
+        persons.append({
+            "name": r.get("nombre", ""),
+            "cedula": r.get("dni", ""),
+            "telegram": r.get("telegram_username", ""),
+            "match_type": "inventario_only",
+            "match_source": None,
+            "farley": {"present": False},
+            "inventario": inv,
+            "comparison": comparison,
+        })
+
+    if q:
+        ql = q.strip().lower()
+        persons = [p for p in persons if any(ql in str(p.get(f, "")).lower() for f in ["name", "cedula", "telegram"])]
+
+    def _verif_sort_key(p):
+        order = {"both": 0, "farley_only": 1, "inventario_only": 2}
+        return (order.get(p["match_type"], 3), (p.get("name") or "").upper())
+    persons.sort(key=_verif_sort_key)
+
+    matched = sum(1 for p in persons if p["match_type"] == "both")
+    only_farley = sum(1 for p in persons if p["match_type"] == "farley_only")
+    only_inventario = sum(1 for p in persons if p["match_type"] == "inventario_only")
+    mismatch_dinar = sum(1 for p in persons if any(c["key"] == "cajadinar" and c.get("status") == "mismatch" for c in p["comparison"]))
+    mismatch_oro = sum(1 for p in persons if any(c["key"] == "cajamicro" and c.get("status") == "mismatch" for c in p["comparison"]))
+    mismatch_total = sum(1 for p in persons if any(c.get("status") == "mismatch" for c in p["comparison"]))
+
+    return {
+        "stats": {
+            "total_farley": len(crm.get("members", [])) if crm else 0,
+            "total_inventario": len(inventario),
+            "matched": matched,
+            "only_farley": only_farley,
+            "only_inventario": only_inventario,
+            "mismatch_dinar": mismatch_dinar,
+            "mismatch_oro": mismatch_oro,
+            "mismatch_total": mismatch_total,
+        },
+        "total": len(persons),
+        "persons": persons,
+    }
+
+
+def _verif_row(key, label, farley_val, inventario_val, detail=None):
+    fv = farley_val if farley_val is not None else None
+    iv = inventario_val if inventario_val is not None else None
+    if fv is not None and iv is not None:
+        status = "ok" if fv == iv else "mismatch"
+    elif fv is not None:
+        status = "only_farley"
+    elif iv is not None:
+        status = "only_inv"
+    else:
+        status = "absent"
+    row = {"key": key, "label": label, "farley": fv, "inventario": iv, "status": status}
+    if detail:
+        row["detail"] = detail
+    return row
