@@ -852,6 +852,10 @@
           <span class="material-icons">search</span>
           <input type="text" id="reparticionSearchInput" placeholder="Buscar por usuario, nombre, documento o pa&iacute;s..." class="search-input">
         </div>
+        <button class="btn btn-add" id="btnReparticionAdd">
+          <span class="material-icons">add</span>
+          A&ntilde;adir
+        </button>
         <span class="table-count" id="reparticionTableCount">0 registros</span>
       </div>
       <div class="table-wrapper">
@@ -954,6 +958,25 @@
           <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeReparticionModal()">Cancelar</button>
             <button class="btn btn-primary" id="btnReparticionModalSubmit" onclick="submitReparticionForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="reparticionDeleteOverlay" style="display:none" onclick="closeReparticionDeleteModal(event)">
+      <div class="modal modal-sm" id="reparticionDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar registro</span>
+          <span class="material-icons modal-close" onclick="closeReparticionDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">&iquest;Seguro de eliminar este registro?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acci&oacute;n no se puede deshacer.</p>
+          <input type="hidden" id="reparticionDeleteId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeReparticionDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeReparticionDelete()">Eliminar</button>
           </div>
         </div>
       </div>

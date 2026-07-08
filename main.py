@@ -1116,12 +1116,7 @@ async def get_reparticion_stats():
 REPARTICION_FIELDS = ["telegram_username", "aporte", "cant_zim", "cant_dinar", "cant_oro", "cajas_total", "nombres", "documento", "pais"]
 
 
-@app.put("/api/reparticion/edit/{record_id}")
-async def edit_reparticion_entry(record_id: int, data: dict = Body(...)):
-    result = supabase_inventario.table(REPARTICION_TABLE).select("*").eq("id", record_id).execute()
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-
+def _parse_reparticion_row(data):
     row = {}
     for k in REPARTICION_FIELDS:
         if k in data:
@@ -1133,6 +1128,28 @@ async def edit_reparticion_entry(record_id: int, data: dict = Body(...)):
                     row[k] = None
             else:
                 row[k] = str(v).strip() if v and str(v).strip() else None
+    return row
+
+
+@app.post("/api/reparticion/add")
+async def add_reparticion_entry(data: dict = Body(...)):
+    now = datetime.now(timezone.utc).isoformat()
+    row = _parse_reparticion_row(data)
+    row["created_at"] = now
+    row["updated_at"] = now
+    result = supabase_inventario.table(REPARTICION_TABLE).insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear el registro")
+    return {"success": True, "data": result.data[0]}
+
+
+@app.put("/api/reparticion/edit/{record_id}")
+async def edit_reparticion_entry(record_id: int, data: dict = Body(...)):
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    row = _parse_reparticion_row(data)
 
     if row:
         row["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -1199,6 +1216,15 @@ async def download_reparticion_xlsx():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.delete("/api/reparticion/delete/{record_id}")
+async def delete_reparticion_entry(record_id: int):
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    supabase_inventario.table(REPARTICION_TABLE).delete().eq("id", record_id).execute()
+    return {"success": True}
 
 
 # ========== CONSULTA ENDPOINT ==========

@@ -1819,6 +1819,7 @@ let reparticionExpandedRow = null;
 
 function initReparticionSearch() {
   document.getElementById("reparticionSearchInput").addEventListener("input", renderReparticionTable);
+  document.getElementById("btnReparticionAdd").addEventListener("click", openReparticionAddModal);
 }
 
 function initReparticionDownload() {
@@ -1978,6 +1979,9 @@ function buildReparticionDetailHtml(r) {
         <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openReparticionEditModal(${r.id})">
           <span class="material-icons" style="font-size:16px">edit</span> Editar
         </button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();openReparticionDeleteModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">delete</span> Eliminar
+        </button>
       </div>
     </div>`;
 }
@@ -1991,7 +1995,7 @@ function toggleReparticionDetail(idx) {
   renderReparticionTable();
 }
 
-// ========== REPARTICION EDIT MODAL ==========
+// ========== REPARTICION MODALS ==========
 
 function openReparticionEditModal(id) {
   const r = reparticionAllData.find(function(item) { return item.id === id; });
@@ -2009,6 +2013,22 @@ function openReparticionEditModal(id) {
   document.getElementById("repFormDocumento").value = r.documento || "";
   document.getElementById("repFormPais").value = r.pais || "";
   document.getElementById("btnReparticionModalSubmit").textContent = "Actualizar";
+  document.getElementById("reparticionModalOverlay").style.display = "flex";
+}
+
+function openReparticionAddModal() {
+  document.getElementById("reparticionEditId").value = "";
+  document.getElementById("reparticionModalTitle").textContent = "Añadir registro";
+  document.getElementById("repFormUsername").value = "";
+  document.getElementById("repFormAporte").value = "";
+  document.getElementById("repFormZim").value = "";
+  document.getElementById("repFormDinar").value = "";
+  document.getElementById("repFormOro").value = "";
+  document.getElementById("repFormCajas").value = "";
+  document.getElementById("repFormNombres").value = "";
+  document.getElementById("repFormDocumento").value = "";
+  document.getElementById("repFormPais").value = "";
+  document.getElementById("btnReparticionModalSubmit").textContent = "Guardar";
   document.getElementById("reparticionModalOverlay").style.display = "flex";
 }
 
@@ -2033,7 +2053,7 @@ function getReparticionFormData() {
 
 async function submitReparticionForm() {
   const editId = document.getElementById("reparticionEditId").value;
-  if (!editId) return;
+  const isEditing = !!editId;
 
   const btn = document.getElementById("btnReparticionModalSubmit");
   btn.disabled = true;
@@ -2041,8 +2061,18 @@ async function submitReparticionForm() {
 
   try {
     const data = getReparticionFormData();
-    const resp = await fetch("/api/reparticion/edit/" + editId, {
-      method: "PUT",
+    let url, method;
+
+    if (isEditing) {
+      url = "/api/reparticion/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/reparticion/add";
+      method = "POST";
+    }
+
+    const resp = await fetch(url, {
+      method: method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
@@ -2059,7 +2089,43 @@ async function submitReparticionForm() {
     alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Actualizar";
+    btn.textContent = document.getElementById("reparticionEditId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+function openReparticionDeleteModal(id) {
+  document.getElementById("reparticionDeleteId").value = id;
+  document.getElementById("reparticionDeleteOverlay").style.display = "flex";
+}
+
+function closeReparticionDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("reparticionDeleteOverlay").style.display = "none";
+}
+
+async function executeReparticionDelete() {
+  const id = document.getElementById("reparticionDeleteId").value;
+  if (!id) return;
+
+  const btn = document.querySelector("#reparticionDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+
+  try {
+    const resp = await fetch("/api/reparticion/delete/" + id, {
+      method: "DELETE",
+    });
+
+    if (!resp.ok) throw new Error("Error al eliminar");
+
+    closeReparticionDeleteModal();
+    reparticionExpandedRow = null;
+    await loadReparticionRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
   }
 }
 
