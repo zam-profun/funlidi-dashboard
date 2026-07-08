@@ -67,6 +67,8 @@ function initializeApp() {
   initTimezone();
   initFarleySearch();
   initVerificacionSearch();
+  initReparticionSearch();
+  initReparticionDownload();
 
   loadSection("registros");
   startAutoRefresh();
@@ -101,6 +103,7 @@ function switchModule(module) {
   document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
   document.getElementById("nav-farley").style.display = module === "farley" ? "" : "none";
   document.getElementById("nav-verificacion").style.display = module === "verificacion" ? "" : "none";
+  document.getElementById("nav-reparticion").style.display = module === "reparticion" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
@@ -108,6 +111,7 @@ function switchModule(module) {
   document.body.classList.toggle("theme-inventario", module === "inventario");
   document.body.classList.toggle("theme-farley", module === "farley");
   document.body.classList.toggle("theme-verificacion", module === "verificacion");
+  document.body.classList.toggle("theme-reparticion", module === "reparticion");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -149,6 +153,8 @@ function switchSection(section) {
     "verificacion-resumen": "Resumen - Verificación",
     "verificacion-busqueda": "Búsqueda - Verificación",
     "verificacion-descargar": "Descargar - Verificación",
+    "reparticion-registros": "Registros - Vaquita",
+    "reparticion-descargar": "Descargar - Vaquita",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -174,6 +180,7 @@ function loadSection(section) {
   if (section === "farley-detalle") loadFarleyDetalle();
   if (section === "verificacion-resumen") loadVerificacionResumen();
   if (section === "verificacion-busqueda") loadVerificacionBusqueda();
+  if (section === "reparticion-registros") loadReparticionRegistros();
 }
 
 function startAutoRefresh() {
@@ -1801,6 +1808,258 @@ async function executeInventarioDelete() {
   } finally {
     btn.disabled = false;
     btn.textContent = "Eliminar";
+  }
+}
+
+
+// ========== REPARTICION VAQUITA FUNCTIONS ==========
+
+let reparticionAllData = [];
+let reparticionExpandedRow = null;
+
+function initReparticionSearch() {
+  document.getElementById("reparticionSearchInput").addEventListener("input", renderReparticionTable);
+}
+
+function initReparticionDownload() {
+  document.getElementById("btnReparticionDownload").addEventListener("click", async () => {
+    const btn = document.getElementById("btnReparticionDownload");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    try {
+      const resp = await fetch("/api/reparticion/download");
+      if (!resp.ok) throw new Error("Error al descargar");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getReparticionFilename(resp);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      document.getElementById("reparticionDownloadInfo").textContent = "Descarga completada.";
+    } catch (err) {
+      document.getElementById("reparticionDownloadInfo").textContent = "Error al descargar.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">description</span> Descargar XLSX';
+    }
+  });
+}
+
+function getReparticionFilename(resp) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  const hoy = new Date();
+  return `Reparticion_Vaquita_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+async function loadReparticionRegistros() {
+  const tbody = document.getElementById("reparticionTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/reparticion/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    reparticionAllData = json.data || [];
+    renderReparticionTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function renderReparticionTable() {
+  const tbody = document.getElementById("reparticionTableBody");
+  const search = document.getElementById("reparticionSearchInput").value.toLowerCase();
+
+  let filtered = reparticionAllData;
+  if (search) {
+    filtered = filtered.filter((r) =>
+      [r.telegram_username, r.nombres, r.documento, r.pais]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
+  }
+
+  document.getElementById("reparticionTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search
+      ? "No se encontraron registros con ese filtro."
+      : "Aun no hay registros de Reparticion Vaquita.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const expandIcon = reparticionExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = reparticionExpandedRow === i;
+    const usuario = r.telegram_username ? (r.telegram_username.startsWith("@") ? r.telegram_username : "@" + r.telegram_username) : "—";
+
+    html += '<tr class="ayudas-row" onclick="toggleReparticionDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td>' + usuario + '</td>';
+    html += '<td class="valor-cell">' + formatCOP(r.aporte || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.cant_zim || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.cant_dinar || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.cant_oro || 0) + '</td>';
+    html += '<td class="valor-cell">' + (r.cajas_total || 0) + '</td>';
+    html += '<td>' + (r.nombres || "—") + '</td>';
+    html += '<td>' + (r.documento || "—") + '</td>';
+    html += '<td>' + (r.pais || "—") + '</td>';
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="10">' + buildReparticionDetailHtml(r) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+function buildReparticionDetailHtml(r) {
+  const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" && String(v).trim() !== "0" ? String(v).trim() : "—";
+  const usuario = r.telegram_username ? (r.telegram_username.startsWith("@") ? r.telegram_username : "@" + r.telegram_username) : "—";
+  const hasMatch = r.nombres || r.documento || r.pais;
+
+  const products = [
+    { icon: "payments", label: "Aporte COP", val: formatCOP(r.aporte || 0) },
+    { icon: "inventory_2", label: "Cant. ZIM", val: f(r.cant_zim) },
+    { icon: "inventory_2", label: "Cant. DINAR", val: f(r.cant_dinar) },
+    { icon: "inventory_2", label: "Cant. ORO", val: f(r.cant_oro) },
+    { icon: "inventory_2", label: "Cajas Total", val: f(r.cajas_total) },
+  ];
+
+  return `
+    <div class="ayudas-detail-card">
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">inventory</span> PRODUCTOS</div>
+        <div class="ayudas-detail-grid">
+          ${products.map(m => `
+          <div class="ayudas-detail-item">
+            <span class="material-icons">${m.icon}</span>
+            <span class="ayudas-detail-label">${m.label}:</span>
+            <span class="ayudas-detail-value" style="font-weight:700">${m.val}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">person</span> INFORMACION PERSONAL</div>
+        ${hasMatch ? `
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${f(r.nombres)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Documento:</span><span class="ayudas-detail-value">${f(r.documento)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">${getCountryFlag(r.pais)} ${f(r.pais)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">alternate_email</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">${usuario}</span></div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#9E9E9E;display:flex;align-items:center;gap:6px">
+          <span class="material-icons" style="font-size:16px">check_circle</span>
+          Datos personales obtenidos de la base de datos del sistema (coincidencia por @usuario)
+        </div>
+        ` : `
+        <div style="display:flex;align-items:center;gap:8px;padding:12px;background:#FFF3E0;border-radius:8px;font-size:13px;color:#E65100">
+          <span class="material-icons" style="font-size:20px">search_off</span>
+          No se encontraron datos personales en las bases de datos. Usa "Editar" para ingresarlos manualmente.
+        </div>
+        `}
+      </div>
+      <div class="ayudas-detail-section ayudas-detail-section-meta">
+        <div class="ayudas-detail-meta-row">
+          <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
+          <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
+        </div>
+      </div>
+      <div class="inventario-detail-actions">
+        <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openReparticionEditModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">edit</span> Editar
+        </button>
+      </div>
+    </div>`;
+}
+
+function toggleReparticionDetail(idx) {
+  if (reparticionExpandedRow === idx) {
+    reparticionExpandedRow = null;
+  } else {
+    reparticionExpandedRow = idx;
+  }
+  renderReparticionTable();
+}
+
+// ========== REPARTICION EDIT MODAL ==========
+
+function openReparticionEditModal(id) {
+  const r = reparticionAllData.find(function(item) { return item.id === id; });
+  if (!r) return;
+
+  document.getElementById("reparticionEditId").value = id;
+  document.getElementById("reparticionModalTitle").textContent = "Editar registro";
+  document.getElementById("repFormUsername").value = r.telegram_username || "";
+  document.getElementById("repFormAporte").value = r.aporte || "";
+  document.getElementById("repFormZim").value = r.cant_zim || "";
+  document.getElementById("repFormDinar").value = r.cant_dinar || "";
+  document.getElementById("repFormOro").value = r.cant_oro || "";
+  document.getElementById("repFormCajas").value = r.cajas_total || "";
+  document.getElementById("repFormNombres").value = r.nombres || "";
+  document.getElementById("repFormDocumento").value = r.documento || "";
+  document.getElementById("repFormPais").value = r.pais || "";
+  document.getElementById("btnReparticionModalSubmit").textContent = "Actualizar";
+  document.getElementById("reparticionModalOverlay").style.display = "flex";
+}
+
+function closeReparticionModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("reparticionModalOverlay").style.display = "none";
+}
+
+function getReparticionFormData() {
+  return {
+    telegram_username: document.getElementById("repFormUsername").value.trim(),
+    aporte: document.getElementById("repFormAporte").value.trim(),
+    cant_zim: document.getElementById("repFormZim").value.trim(),
+    cant_dinar: document.getElementById("repFormDinar").value.trim(),
+    cant_oro: document.getElementById("repFormOro").value.trim(),
+    cajas_total: document.getElementById("repFormCajas").value.trim(),
+    nombres: document.getElementById("repFormNombres").value.trim(),
+    documento: document.getElementById("repFormDocumento").value.trim(),
+    pais: document.getElementById("repFormPais").value.trim(),
+  };
+}
+
+async function submitReparticionForm() {
+  const editId = document.getElementById("reparticionEditId").value;
+  if (!editId) return;
+
+  const btn = document.getElementById("btnReparticionModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const data = getReparticionFormData();
+    const resp = await fetch("/api/reparticion/edit/" + editId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al guardar");
+    }
+
+    closeReparticionModal();
+    reparticionExpandedRow = null;
+    await loadReparticionRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Actualizar";
   }
 }
 

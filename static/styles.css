@@ -58,6 +58,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-reparticion {
+  --clr-primary: #FF8A65;
+  --clr-primary-rgb: 255, 138, 101;
+  --clr-primary-hover: #FF7043;
+  --clr-primary-dark: #F4511E;
+  --clr-bg-light: #FBE9E7;
+  --clr-bg-hover: #FFCCBC;
+  --clr-border: #FFCCBC;
+  --clr-header-border: #FFCCBC;
+  --clr-warning: #F57F17;
+}
+
 * {
   margin: 0;
   padding: 0;

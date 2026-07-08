@@ -1076,6 +1076,131 @@ async def delete_inventario_entry(telegram_user_id: int):
     return {"success": True}
 
 
+# ========== REPARTICION VAQUITA ENDPOINTS ==========
+
+REPARTICION_TABLE = "reparticion_vaquita"
+
+
+@app.get("/api/reparticion/data")
+async def get_reparticion_data():
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/reparticion/stats")
+async def get_reparticion_stats():
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").execute()
+    rows = result.data or []
+    total = len(rows)
+    total_aporte = sum(int(r.get("aporte") or 0) for r in rows)
+    total_zim = sum(int(r.get("cant_zim") or 0) for r in rows)
+    total_dinar = sum(int(r.get("cant_dinar") or 0) for r in rows)
+    total_oro = sum(int(r.get("cant_oro") or 0) for r in rows)
+    total_cajas = sum(int(r.get("cajas_total") or 0) for r in rows)
+    matched = sum(1 for r in rows if r.get("nombres"))
+    unmatched = total - matched
+
+    return {
+        "total": total,
+        "total_aporte": total_aporte,
+        "total_zim": total_zim,
+        "total_dinar": total_dinar,
+        "total_oro": total_oro,
+        "total_cajas": total_cajas,
+        "matched": matched,
+        "unmatched": unmatched,
+    }
+
+
+REPARTICION_FIELDS = ["telegram_username", "aporte", "cant_zim", "cant_dinar", "cant_oro", "cajas_total", "nombres", "documento", "pais"]
+
+
+@app.put("/api/reparticion/edit/{record_id}")
+async def edit_reparticion_entry(record_id: int, data: dict = Body(...)):
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    row = {}
+    for k in REPARTICION_FIELDS:
+        if k in data:
+            v = data[k]
+            if k in ("aporte", "cant_zim", "cant_dinar", "cant_oro", "cajas_total"):
+                try:
+                    row[k] = int(v) if v and str(v).strip() else None
+                except (ValueError, TypeError):
+                    row[k] = None
+            else:
+                row[k] = str(v).strip() if v and str(v).strip() else None
+
+    if row:
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        supabase_inventario.table(REPARTICION_TABLE).update(row).eq("id", record_id).execute()
+
+    return {"success": True}
+
+
+@app.get("/api/reparticion/download")
+async def download_reparticion_xlsx():
+    result = supabase_inventario.table(REPARTICION_TABLE).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Reparticion Vaquita"
+
+    headers = [
+        "Usuario Telegram", "Aporte COP",
+        "Cant. ZIM", "Cant. DINAR", "Cant. ORO", "Cajas Total",
+        "Nombres y Apellidos", "Documento de Identidad", "Pais",
+    ]
+    ws.append(headers)
+
+    for r in rows:
+        ws.append([
+            r.get("telegram_username") or "-",
+            int(r.get("aporte") or 0),
+            int(r.get("cant_zim") or 0),
+            int(r.get("cant_dinar") or 0),
+            int(r.get("cant_oro") or 0),
+            int(r.get("cajas_total") or 0),
+            r.get("nombres") or "-",
+            r.get("documento") or "-",
+            r.get("pais") or "-",
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="FF8A65", end_color="FF8A65", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"Reparticion_Vaquita_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ========== CONSULTA ENDPOINT ==========
 
 

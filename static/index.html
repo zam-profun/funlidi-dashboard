@@ -21,6 +21,7 @@
           <option value="consulta">CONSULTA GENERAL</option>
           <option value="farley">B. DATOS - FARLEY</option>
           <option value="verificacion">VERIFICACIÓN</option>
+          <option value="reparticion">VAQUITA - REPARTICIÓN</option>
         </select>
       </div>
     </div>
@@ -130,6 +131,16 @@
         <span>B&uacute;squeda</span>
       </button>
       <button class="nav-btn" data-section="verificacion-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-reparticion" style="display:none">
+      <button class="nav-btn active" data-section="reparticion-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="reparticion-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
@@ -828,6 +839,125 @@
         </div>
       </div>
     </section>
+
+    <!-- ========== REPARTICION VAQUITA SECTIONS ========== -->
+
+    <section class="content-section" id="section-reparticion-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Registro de la Repartici&oacute;n Vaquita 100 Cupos. Datos personales obtenidos desde las bases de datos del sistema cuando se encontr&oacute; coincidencia con el usuario de Telegram.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="reparticionSearchInput" placeholder="Buscar por usuario, nombre, documento o pa&iacute;s..." class="search-input">
+        </div>
+        <span class="table-count" id="reparticionTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="reparticionTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Usuario Telegram</th>
+              <th>Aporte COP</th>
+              <th>Cant. ZIM</th>
+              <th>Cant. DINAR</th>
+              <th>Cant. ORO</th>
+              <th>Cajas Total</th>
+              <th>Nombres y Apellidos</th>
+              <th>Documento</th>
+              <th>Pa&iacute;s</th>
+            </tr>
+          </thead>
+          <tbody id="reparticionTableBody">
+            <tr class="empty-row">
+              <td colspan="10">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-reparticion-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargar&aacute; un archivo de Excel con todos los datos de la Repartici&oacute;n Vaquita 100 Cupos.</p>
+        <button class="btn btn-download" id="btnReparticionDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="reparticionDownloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== REPARTICION MODALS ========== -->
+
+    <div class="modal-overlay" id="reparticionModalOverlay" style="display:none" onclick="closeReparticionModal(event)">
+      <div class="modal" id="reparticionModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">edit</span>
+          <span class="modal-title" id="reparticionModalTitle">Editar registro</span>
+          <span class="material-icons modal-close" onclick="closeReparticionModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="reparticionEditId" value="">
+          <div class="form-group">
+            <label class="form-label">Telegram @username</label>
+            <input type="text" id="repFormUsername" class="form-input" placeholder="@usuario">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Aporte COP</label>
+              <input type="number" id="repFormAporte" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cant. ZIM</label>
+              <input type="number" id="repFormZim" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cant. DINAR</label>
+              <input type="number" id="repFormDinar" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cant. ORO</label>
+              <input type="number" id="repFormOro" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cajas Total</label>
+            <input type="number" id="repFormCajas" class="form-input" min="0" placeholder="0">
+          </div>
+          <div class="form-divider">INFORMACIÓN PERSONAL</div>
+          <div class="form-group">
+            <label class="form-label">Nombres y Apellidos</label>
+            <input type="text" id="repFormNombres" class="form-input" placeholder="Ej: JUAN PEREZ">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Documento de Identidad</label>
+              <input type="text" id="repFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pa&iacute;s</label>
+              <input type="text" id="repFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeReparticionModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnReparticionModalSubmit" onclick="submitReparticionForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ========== INVENTARIO MODALS ========== -->
 
