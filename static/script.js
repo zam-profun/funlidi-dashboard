@@ -63,6 +63,7 @@ function initializeApp() {
   initAyudasDownload();
   initInventarioSearch();
   initInventarioDownload();
+  initInventarioProductos();
   initConsultaSearch();
   initTimezone();
   initFarleySearch();
@@ -144,6 +145,7 @@ function switchSection(section) {
     "inventario-registros": "Registros - Inventario",
     "inventario-estadisticas": "Estadisticas - Inventario",
     "inventario-descargar": "Descargar - Inventario",
+    "inventario-productos": "Productos - Inventario",
     "consulta-buscar": "Consulta General",
     "farley-resumen": "Resumen - B. DATOS FARLEY",
     "farley-miembros": "Miembros - B. DATOS FARLEY",
@@ -172,6 +174,7 @@ function loadSection(section) {
   if (section === "ayudas-estadisticas") loadAyudasStats();
   if (section === "inventario-registros") loadInventarioRegistros();
   if (section === "inventario-estadisticas") loadInventarioStats();
+  if (section === "inventario-productos") loadInventarioProductos();
   if (section === "consulta-buscar") loadConsulta();
   if (section === "farley-resumen") loadFarleyResumen();
   if (section === "farley-miembros") loadFarleyMiembros();
@@ -1477,6 +1480,144 @@ function getInventarioFilename(resp) {
   }
   const hoy = new Date();
   return `Inventario_Adquisiciones_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+// ========== INVENTARIO PRODUCTOS ==========
+
+let inventarioProductosExpanded = {};
+
+function initInventarioProductos() {
+  document.getElementById("section-inventario-productos").addEventListener("click", function(e) {
+    const toggleBtn = e.target.closest(".product-card-toggle");
+    if (toggleBtn) {
+      const card = toggleBtn.closest(".product-card");
+      const product = card.dataset.product;
+      const body = card.querySelector(".product-card-body");
+      const isHidden = body.style.display === "none";
+      body.style.display = isHidden ? "" : "none";
+      toggleBtn.innerHTML = isHidden
+        ? '<span class="material-icons">expand_less</span>'
+        : '<span class="material-icons">expand_more</span>';
+      return;
+    }
+    const dlBtn = e.target.closest(".product-card-download");
+    if (dlBtn) {
+      const product = dlBtn.dataset.product;
+      downloadInventarioProducto(product);
+      return;
+    }
+  });
+}
+
+async function downloadInventarioProducto(producto) {
+  const btn = document.querySelector(`.product-card-download[data-product="${producto}"]`);
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando...';
+  try {
+    const resp = await fetch("/api/inventario/productos/download/" + producto);
+    if (!resp.ok) throw new Error("Error al descargar");
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const header = resp.headers.get("Content-Disposition");
+    let filename = header && header.match(/filename="(.+)"/) ? header.match(/filename="(.+)"/)[1] : (producto + ".xlsx");
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert("Error al descargar el archivo.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+}
+
+async function loadInventarioProductos() {
+  const container = document.getElementById("inventarioProductosContainer");
+  container.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando productos...</p></div>';
+
+  try {
+    const resp = await fetch("/api/inventario/productos");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    renderInventarioProductos(json.productos || {});
+    updateRefreshIndicator(false);
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar productos.</p></div>';
+  }
+}
+
+function renderInventarioProductos(productos) {
+  const container = document.getElementById("inventarioProductosContainer");
+
+  const productIcons = {
+    cajamicro: "inventory_2",
+    cajadinar: "inventory_2",
+    per_aleman: "auto_stories",
+    per_top: "star",
+    per_dragon: "auto_stories",
+  };
+
+  const productColors = {
+    cajamicro: "#81C784",
+    cajadinar: "#4CAF50",
+    per_aleman: "#66BB6A",
+    per_top: "#43A047",
+    per_dragon: "#388E3C",
+  };
+
+  let html = '<div class="productos-grid">';
+  for (const [key, prod] of Object.entries(productos)) {
+    const icon = productIcons[key] || "inventory_2";
+    const color = productColors[key] || "#81C784";
+    const hasBuyers = prod.buyers && prod.buyers.length > 0;
+
+    html += '<div class="product-card" data-product="' + key + '">';
+    html += '  <div class="product-card-header" style="border-left: 4px solid ' + color + '">';
+    html += '    <span class="material-icons product-card-icon" style="color:' + color + '">' + icon + '</span>';
+    html += '    <div class="product-card-info">';
+    html += '      <div class="product-card-title">' + prod.label + '</div>';
+    html += '      <div class="product-card-meta">';
+    html += '        <span class="product-stat"><strong>' + prod.total_buyers + '</strong> compradores</span>';
+    html += '        <span class="product-stat-sep">|</span>';
+    html += '        <span class="product-stat"><strong>' + prod.total_qty.toLocaleString() + '</strong> unidades</span>';
+    html += '      </div>';
+    html += '    </div>';
+    html += '    <div class="product-card-actions">';
+    html += '      <button class="btn btn-sm product-card-download" data-product="' + key + '" title="Descargar Excel de ' + prod.label + '">';
+    html += '        <span class="material-icons" style="font-size:16px">download</span> XLSX';
+    html += '      </button>';
+    html += '      <button class="btn btn-sm product-card-toggle" title="Ver compradores">';
+    html += '        <span class="material-icons">expand_more</span>';
+    html += '      </button>';
+    html += '    </div>';
+    html += '  </div>';
+    html += '  <div class="product-card-body" style="display:none">';
+
+    if (hasBuyers) {
+      html += '    <table class="data-table product-buyer-table">';
+      html += '      <thead><tr><th>Nombres y Apellidos</th><th>Usuario Telegram</th><th>DNI</th><th>Pa&iacute;s</th><th style="text-align:right">Cantidad</th></tr></thead>';
+      html += '      <tbody>';
+      for (const b of prod.buyers) {
+        const uname = b.telegram_username ? (b.telegram_username.startsWith("@") ? b.telegram_username : "@" + b.telegram_username) : "—";
+        html += '        <tr><td>' + escHtml(b.nombre) + '</td><td>' + uname + '</td><td>' + escHtml(b.dni) + '</td><td>' + escHtml(b.pais) + '</td><td style="text-align:right;font-weight:600">' + b.cantidad.toLocaleString() + '</td></tr>';
+      }
+      html += '      </tbody>';
+      html += '    </table>';
+    } else {
+      html += '    <div class="empty-state" style="padding:20px"><span class="material-icons empty-icon" style="font-size:32px">inventory</span><p>No hay compradores para este producto.</p></div>';
+    }
+
+    html += '  </div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
 }
 
 async function loadInventarioRegistros() {

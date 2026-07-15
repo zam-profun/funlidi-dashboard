@@ -92,6 +92,10 @@
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
+      <button class="nav-btn" data-section="inventario-productos">
+        <span class="material-icons">inventory_2</span>
+        <span>Productos</span>
+      </button>
     </nav>
     <nav class="sidebar-nav" id="nav-consulta" style="display:none">
       <button class="nav-btn active" data-section="consulta-buscar">
@@ -744,6 +748,19 @@
           Descargar XLSX
         </button>
         <p class="download-info" id="inventarioDownloadInfo"></p>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-inventario-productos">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Desglose por producto: compradores y cantidades adquiridas de cada material.</p>
+      </div>
+      <div id="inventarioProductosContainer">
+        <div class="empty-state">
+          <span class="material-icons empty-icon">inbox</span>
+          <p>Cargando productos...</p>
+        </div>
       </div>
     </section>
 

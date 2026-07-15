@@ -1002,6 +1002,108 @@ async def download_inventario_xlsx():
     )
 
 
+INVENTARIO_PRODUCTOS = {
+    "cajamicro": "Caja Micro",
+    "cajadinar": "Caja Dinar",
+    "per_aleman": "Perfil Aleman",
+    "per_top": "Perfil Top",
+    "per_dragon": "Perfil Dragon",
+}
+
+
+def _productos_buyers():
+    result = supabase_inventario.table(INVENTARIO_TABLE).select("*").execute()
+    rows = result.data or []
+    productos = {}
+    for col, label in INVENTARIO_PRODUCTOS.items():
+        buyers = []
+        for r in rows:
+            v = r.get(col)
+            if v is not None and str(v).strip() not in ("", "0", "None"):
+                try:
+                    qty = int(float(str(v)))
+                except Exception:
+                    qty = 0
+                if qty > 0:
+                    buyers.append({
+                        "nombre": r.get("nombre") or "-",
+                        "telegram_username": r.get("telegram_username") or "",
+                        "dni": r.get("dni") or "-",
+                        "pais": r.get("pais") or "-",
+                        "cantidad": qty,
+                    })
+        buyers.sort(key=lambda x: x["cantidad"], reverse=True)
+        productos[col] = {
+            "label": label,
+            "total_buyers": len(buyers),
+            "total_qty": sum(b["cantidad"] for b in buyers),
+            "buyers": buyers,
+        }
+    return productos
+
+
+@app.get("/api/inventario/productos")
+async def get_inventario_productos():
+    return {"productos": _productos_buyers()}
+
+
+@app.get("/api/inventario/productos/download/{producto}")
+async def download_inventario_producto(producto: str):
+    if producto not in INVENTARIO_PRODUCTOS:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    data = _productos_buyers()
+    prod = data[producto]
+    label = prod["label"]
+    buyers = prod["buyers"]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = label
+
+    headers = ["Nombres y Apellidos", "Usuario Telegram", "DNI", "Pais", "Cantidad"]
+    ws.append(headers)
+
+    for b in buyers:
+        usuario = b["telegram_username"]
+        if usuario:
+            usuario = "@" + usuario if not usuario.startswith("@") else usuario
+        else:
+            usuario = "-"
+        ws.append([b["nombre"], usuario, b["dni"], b["pais"], b["cantidad"]])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="81C784", end_color="81C784", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    safe_label = label.replace(" ", "_")
+    filename = f"{safe_label}_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ========== INVENTARIO CRUD ENDPOINTS ==========
 
 

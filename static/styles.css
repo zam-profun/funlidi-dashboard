@@ -1969,3 +1969,152 @@ body {
 }
 .toggle-switch input:checked + .toggle-slider { background:var(--clr-primary); }
 .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+
+/* ========== INVENTARIO PRODUCTOS ========== */
+
+.productos-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.product-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  overflow: hidden;
+  transition: box-shadow .2s;
+}
+
+.product-card:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+}
+
+.product-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+}
+
+.product-card-icon {
+  font-size: 32px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.product-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.product-card-meta {
+  font-size: 13px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-stat strong {
+  color: var(--clr-primary-dark);
+}
+
+.product-stat-sep {
+  color: #ddd;
+  font-size: 14px;
+}
+
+.product-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.product-card-download {
+  background: var(--clr-primary);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background .2s;
+}
+
+.product-card-download:hover {
+  background: var(--clr-primary-hover);
+}
+
+.product-card-download:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.product-card-toggle {
+  background: transparent;
+  color: #999;
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all .2s;
+}
+
+.product-card-toggle:hover {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.product-card-body {
+  border-top: 1px solid #f0f0f0;
+  padding: 0;
+}
+
+.product-buyer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.product-buyer-table th {
+  background: #f9fafb;
+  padding: 10px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #e0e0e0;
+  white-space: nowrap;
+}
+
+.product-buyer-table td {
+  padding: 9px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #333;
+}
+
+.product-buyer-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.product-buyer-table tbody tr:last-child td {
+  border-bottom: none;
+}
