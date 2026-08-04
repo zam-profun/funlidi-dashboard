@@ -22,6 +22,7 @@
           <option value="farley">B. DATOS - FARLEY</option>
           <option value="verificacion">VERIFICACIÓN</option>
           <option value="reparticion">VAQUITA - REPARTICIÓN</option>
+          <option value="vaquitas">VAQUITA - DIRECTORIO</option>
         </select>
       </div>
     </div>
@@ -145,6 +146,36 @@
         <span>Registros</span>
       </button>
       <button class="nav-btn" data-section="reparticion-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-vaquitas" style="display:none">
+      <button class="nav-btn active" data-section="vaquitas-registros" data-mod="directorio">
+        <span class="material-icons">people</span>
+        <span>Directorio</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-registros" data-mod="aguila_roja">
+        <span class="material-icons">inventory_2</span>
+        <span>Aguila Roja</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-registros" data-mod="aguila_verde">
+        <span class="material-icons">inventory_2</span>
+        <span>Aguila Verde</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-registros" data-mod="googolplex">
+        <span class="material-icons">inventory_2</span>
+        <span>Googolplex</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-registros" data-mod="listado1">
+        <span class="material-icons">inventory_2</span>
+        <span>Listado 1</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-registros" data-mod="listado2">
+        <span class="material-icons">inventory_2</span>
+        <span>Listado 2</span>
+      </button>
+      <button class="nav-btn" data-section="vaquitas-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
@@ -917,6 +948,117 @@
         <p class="download-info" id="reparticionDownloadInfo"></p>
       </div>
     </section>
+
+    <!-- ========== VAQUITA DIRECTORIO + PRODUCTOS SECTIONS ========== -->
+
+    <section class="content-section" id="section-vaquitas-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p id="vaquitasInfoBanner">Directorio unificado de clientes Vaquitas con sus productos. Los datos fueron migrados desde los listados y las bases del sistema.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="vaquitasSearchInput" placeholder="Buscar por usuario, nombre, documento o pa&iacute;s..." class="search-input">
+        </div>
+        <button class="btn btn-add" id="btnVaquitasAdd">
+          <span class="material-icons">add</span>
+          A&ntilde;adir
+        </button>
+        <span class="table-count" id="vaquitasTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="vaquitasTable">
+          <thead id="vaquitasTableHead"></thead>
+          <tbody id="vaquitasTableBody">
+            <tr class="empty-row">
+              <td colspan="10">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-vaquitas-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3 id="vaquitasDownloadTitle">Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargar&aacute; un archivo de Excel con los datos del m&oacute;dulo Vaquitas seleccionado.</p>
+        <div class="download-actions" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+          <button class="btn btn-download" data-dlmod="directorio">
+            <span class="material-icons">description</span>
+            Directorio
+          </button>
+          <button class="btn btn-download" data-dlmod="aguila_roja">
+            <span class="material-icons">description</span>
+            Aguila Roja
+          </button>
+          <button class="btn btn-download" data-dlmod="aguila_verde">
+            <span class="material-icons">description</span>
+            Aguila Verde
+          </button>
+          <button class="btn btn-download" data-dlmod="googolplex">
+            <span class="material-icons">description</span>
+            Googolplex
+          </button>
+          <button class="btn btn-download" data-dlmod="listado1">
+            <span class="material-icons">description</span>
+            Listado 1
+          </button>
+          <button class="btn btn-download" data-dlmod="listado2">
+            <span class="material-icons">description</span>
+            Listado 2
+          </button>
+        </div>
+        <p class="download-info" id="vaquitasDownloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== VAQUITAS MODALS ========== -->
+
+    <div class="modal-overlay" id="vaquitasModalOverlay" style="display:none" onclick="closeVaquitasModal(event)">
+      <div class="modal" id="vaquitasModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">edit</span>
+          <span class="modal-title" id="vaquitasModalTitle">Editar registro</span>
+          <span class="material-icons modal-close" onclick="closeVaquitasModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="vaquitasEditId" value="">
+          <input type="hidden" id="vaquitasEditMod" value="">
+          <div id="vaquitasFormFields"></div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeVaquitasModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnVaquitasModalSubmit" onclick="submitVaquitasForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="vaquitasDeleteOverlay" style="display:none" onclick="closeVaquitasDeleteModal(event)">
+      <div class="modal modal-sm" id="vaquitasDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar registro</span>
+          <span class="material-icons modal-close" onclick="closeVaquitasDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">&iquest;Seguro de eliminar este registro?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acci&oacute;n no se puede deshacer.</p>
+          <input type="hidden" id="vaquitasDeleteId" value="">
+          <input type="hidden" id="vaquitasDeleteMod" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeVaquitasDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeVaquitasDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ========== REPARTICION MODALS ========== -->
 

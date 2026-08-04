@@ -70,6 +70,8 @@ function initializeApp() {
   initVerificacionSearch();
   initReparticionSearch();
   initReparticionDownload();
+  initVaquitasSearch();
+  initVaquitasDownload();
 
   loadSection("registros");
   startAutoRefresh();
@@ -105,6 +107,7 @@ function switchModule(module) {
   document.getElementById("nav-farley").style.display = module === "farley" ? "" : "none";
   document.getElementById("nav-verificacion").style.display = module === "verificacion" ? "" : "none";
   document.getElementById("nav-reparticion").style.display = module === "reparticion" ? "" : "none";
+  document.getElementById("nav-vaquitas").style.display = module === "vaquitas" ? "" : "none";
   document.querySelectorAll(".content-section").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".sidebar-nav .nav-btn").forEach((b) => b.classList.remove("active"));
 
@@ -113,6 +116,7 @@ function switchModule(module) {
   document.body.classList.toggle("theme-farley", module === "farley");
   document.body.classList.toggle("theme-verificacion", module === "verificacion");
   document.body.classList.toggle("theme-reparticion", module === "reparticion");
+  document.body.classList.toggle("theme-vaquitas", module === "vaquitas");
 
   const activeNav = document.getElementById("nav-" + module);
   const firstBtn = activeNav.querySelector(".nav-btn");
@@ -157,6 +161,8 @@ function switchSection(section) {
     "verificacion-descargar": "Descargar - Verificación",
     "reparticion-registros": "Registros - Vaquita",
     "reparticion-descargar": "Descargar - Vaquita",
+    "vaquitas-registros": "Directorio - Vaquitas",
+    "vaquitas-descargar": "Descargar - Vaquitas",
   };
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
@@ -184,6 +190,7 @@ function loadSection(section) {
   if (section === "verificacion-resumen") loadVerificacionResumen();
   if (section === "verificacion-busqueda") loadVerificacionBusqueda();
   if (section === "reparticion-registros") loadReparticionRegistros();
+  if (section === "vaquitas-registros") loadVaquitasRegistros();
 }
 
 function startAutoRefresh() {
@@ -2262,6 +2269,465 @@ async function executeReparticionDelete() {
     closeReparticionDeleteModal();
     reparticionExpandedRow = null;
     await loadReparticionRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
+  }
+}
+
+
+// ========== VAQUITA DIRECTORIO + PRODUCTOS FUNCTIONS ==========
+
+const VAQUITAS_MODS = {
+  directorio: {
+    title: "Directorio de Clientes",
+    info: "Directorio unificado de clientes Vaquitas. Campos: usuario, nombres, documento, pa&iacute;s y lista de productos donde participa.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Productos"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFProductos", label: "Productos (separados por coma)", type: "text", key: "productos" },
+    ],
+  },
+  aguila_roja: {
+    title: "Aguila Roja",
+    info: "Participaciones del Aguila Roja. Campos: cupo y porcentaje.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Cupo", "Porcentaje"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais", "cupo", "porcentaje"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFCupo", label: "Cupo", type: "number", key: "cupo" },
+      { id: "vaqFPorcentaje", label: "Porcentaje", type: "number", key: "porcentaje" },
+    ],
+  },
+  aguila_verde: {
+    title: "Aguila Verde",
+    info: "Participaciones del Aguila Verde. Campos: cupos y porcentaje.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Cupos", "Porcentaje"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais", "cupos", "porcentaje"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFCupos", label: "Cupos", type: "number", key: "cupos" },
+      { id: "vaqFPorcentaje", label: "Porcentaje", type: "number", key: "porcentaje" },
+    ],
+  },
+  googolplex: {
+    title: "Vaquita Googolplex",
+    info: "Participaciones de la Vaquita Googolplex. Campos: cantidad y tipo.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Cantidad", "Tipo"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais", "cantidad", "tipo"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFCantidad", label: "Cantidad", type: "number", key: "cantidad" },
+      { id: "vaqFTipo", label: "Tipo", type: "text", key: "tipo" },
+    ],
+  },
+  listado1: {
+    title: "Listado 1 - Vaquita 20 Contenedores",
+    info: "Participaciones del Listado 1 (20 contenedores). Cajas ZIM / DINAR / ORO con sus materiales.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Cajas ZIM", "Cajas DINAR", "Cajas ORO", "Material ZIM", "Material DINAR", "Material ORO"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro", "material_zim", "material_dinar", "material_oro"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFCajasZim", label: "Cajas ZIM", type: "number", key: "cajas_zim" },
+      { id: "vaqFCajasDinar", label: "Cajas DINAR", type: "number", key: "cajas_dinar" },
+      { id: "vaqFCajasOro", label: "Cajas ORO", type: "number", key: "cajas_oro" },
+      { id: "vaqFMatZim", label: "Material ZIM", type: "text", key: "material_zim" },
+      { id: "vaqFMatDinar", label: "Material DINAR", type: "text", key: "material_dinar" },
+      { id: "vaqFMatOro", label: "Material ORO", type: "text", key: "material_oro" },
+    ],
+  },
+  listado2: {
+    title: "Listado 2 - Vaquita 20 Contenedores",
+    info: "Participaciones del Listado 2 (20 contenedores). Cajas ZIM / DINAR / ORO con sus materiales.",
+    headers: ["", "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pa&iacute;s", "Cajas ZIM", "Cajas DINAR", "Cajas ORO", "Material ZIM", "Material DINAR", "Material ORO"],
+    mainFields: ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro"],
+    detailFields: ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro", "material_zim", "material_dinar", "material_oro"],
+    formFields: [
+      { id: "vaqFUsername", label: "Telegram @username", type: "text", key: "telegram_username" },
+      { id: "vaqFNombres", label: "Nombres y Apellidos", type: "text", key: "nombres" },
+      { id: "vaqFDocumento", label: "Documento", type: "text", key: "documento" },
+      { id: "vaqFPais", label: "Pa&iacute;s", type: "text", key: "pais" },
+      { id: "vaqFCajasZim", label: "Cajas ZIM", type: "number", key: "cajas_zim" },
+      { id: "vaqFCajasDinar", label: "Cajas DINAR", type: "number", key: "cajas_dinar" },
+      { id: "vaqFCajasOro", label: "Cajas ORO", type: "number", key: "cajas_oro" },
+      { id: "vaqFMatZim", label: "Material ZIM", type: "text", key: "material_zim" },
+      { id: "vaqFMatDinar", label: "Material DINAR", type: "text", key: "material_dinar" },
+      { id: "vaqFMatOro", label: "Material ORO", type: "text", key: "material_oro" },
+    ],
+  },
+};
+
+let vaquitasAllData = [];
+let vaquitasExpandedRow = null;
+let vaquitasCurrentMod = "directorio";
+
+function getVaquitasCurrentMod() {
+  const active = document.querySelector("#nav-vaquitas .nav-btn.active");
+  return active && active.dataset.mod ? active.dataset.mod : vaquitasCurrentMod;
+}
+
+function vaquitasModCfg() {
+  return VAQUITAS_MODS[getVaquitasCurrentMod()];
+}
+
+function initVaquitasSearch() {
+  document.getElementById("vaquitasSearchInput").addEventListener("input", renderVaquitasTable);
+  document.getElementById("btnVaquitasAdd").addEventListener("click", openVaquitasAddModal);
+}
+
+function initVaquitasDownload() {
+  document.querySelectorAll("[data-dlmod]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const mod = btn.dataset.dlmod;
+      const info = document.getElementById("vaquitasDownloadInfo");
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando...';
+      try {
+        const resp = await fetch("/api/vaquitas/" + mod + "/download");
+        if (!resp.ok) throw new Error("Error al descargar");
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = getVaquitasFilename(resp, mod);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        info.textContent = "Descarga completada: " + (VAQUITAS_MODS[mod] ? VAQUITAS_MODS[mod].title : mod) + ".";
+      } catch (err) {
+        info.textContent = "Error al descargar.";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+  });
+}
+
+function getVaquitasFilename(resp, mod) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  const hoy = new Date();
+  return `Vaquitas_${mod}_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+async function loadVaquitasRegistros() {
+  const mod = getVaquitasCurrentMod();
+  vaquitasCurrentMod = mod;
+  const cfg = VAQUITAS_MODS[mod];
+  document.getElementById("vaquitasInfoBanner").innerHTML = cfg.info;
+  document.getElementById("sectionTitle").textContent = cfg.title + " - Vaquitas";
+  renderVaquitasHeaders(cfg);
+
+  const tbody = document.getElementById("vaquitasTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cfg.headers.length + '"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/vaquitas/" + mod + "/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    vaquitasAllData = json.data || [];
+    renderVaquitasTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cfg.headers.length + '"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function renderVaquitasHeaders(cfg) {
+  const thead = document.getElementById("vaquitasTableHead");
+  const html = cfg.headers.map((h, i) => {
+    if (i === 0) return '<th style="width:36px">' + h + '</th>';
+    return '<th>' + h + '</th>';
+  }).join("");
+  thead.innerHTML = "<tr>" + html + "</tr>";
+}
+
+function renderVaquitasTable() {
+  const tbody = document.getElementById("vaquitasTableBody");
+  const cfg = vaquitasModCfg();
+  const search = document.getElementById("vaquitasSearchInput").value.toLowerCase();
+
+  let filtered = vaquitasAllData;
+  if (search) {
+    filtered = filtered.filter((r) =>
+      [r.telegram_username, r.nombres, r.documento, r.pais]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
+  }
+
+  document.getElementById("vaquitasTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search
+      ? "No se encontraron registros con ese filtro."
+      : "Aun no hay registros en este modulo.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cfg.headers.length + '"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const expandIcon = vaquitasExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = vaquitasExpandedRow === i;
+    const usuario = r.telegram_username ? (r.telegram_username.startsWith("@") ? r.telegram_username : "@" + r.telegram_username) : "—";
+
+    html += '<tr class="ayudas-row" onclick="toggleVaquitasDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td>' + usuario + '</td>';
+    html += '<td>' + (r.nombres || "—") + '</td>';
+    html += '<td>' + (r.documento || "—") + '</td>';
+    html += '<td>' + (r.pais || "—") + '</td>';
+
+    for (let j = 5; j < cfg.headers.length; j++) {
+      const key = cfg.mainFields[j - 1] || null;
+      if (!key) { html += '<td></td>'; continue; }
+      const v = r[key];
+      if (typeof v === "number") {
+        html += '<td class="valor-cell">' + v + '</td>';
+      } else {
+        html += '<td>' + (v && String(v).trim() ? (key === "productos" ? fmtProductos(v) : v) : "—") + '</td>';
+      }
+    }
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="' + cfg.headers.length + '">' + buildVaquitasDetailHtml(r, cfg) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+function fmtProductos(v) {
+  if (Array.isArray(v)) {
+    return v.map((p) => p.replace("participaciones_", "").replace("_", " ")).join(", ");
+  }
+  return String(v || "").replace(/participaciones_/g, "").replace(/_/g, " ");
+}
+
+function buildVaquitasDetailHtml(r, cfg) {
+  const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" && String(v).trim() !== "0" ? String(v).trim() : "—";
+  const usuario = r.telegram_username ? (r.telegram_username.startsWith("@") ? r.telegram_username : "@" + r.telegram_username) : "—";
+
+  const numLabels = { cupo: "Cupo", porcentaje: "Porcentaje", cupos: "Cupos", cantidad: "Cantidad", cajas_zim: "Cajas ZIM", cajas_dinar: "Cajas DINAR", cajas_oro: "Cajas ORO" };
+
+  const items = cfg.detailFields.map((k) => {
+    const v = r[k];
+    if (k === "telegram_username") return { icon: "alternate_email", label: "Telegram", val: usuario };
+    if (k === "nombres") return { icon: "badge", label: "Nombres", val: f(v) };
+    if (k === "documento") return { icon: "assignment_ind", label: "Documento", val: f(v) };
+    if (k === "pais") return { icon: "public", label: "Pais", val: getCountryFlag(r.pais) + " " + f(v) };
+    if (k === "productos") return { icon: "inventory_2", label: "Productos", val: f(fmtProductos(v)) };
+    if (k.startsWith("material_")) return { icon: "category", label: "Material " + k.replace("material_", "").toUpperCase(), val: f(v) };
+    if (typeof v === "number") return { icon: "inventory_2", label: numLabels[k] || k, val: String(v) };
+    return { icon: "inventory_2", label: numLabels[k] || k, val: f(v) };
+  });
+
+  const grid = items.map((m) =>
+    '<div class="ayudas-detail-item"><span class="material-icons">' + m.icon + '</span><span class="ayudas-detail-label">' + m.label + ':</span><span class="ayudas-detail-value" style="font-weight:700">' + m.val + '</span></div>'
+  ).join('');
+
+  return `
+    <div class="ayudas-detail-card">
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">person</span> DATOS DEL REGISTRO</div>
+        <div class="ayudas-detail-grid">${grid}</div>
+      </div>
+      <div class="ayudas-detail-section ayudas-detail-section-meta">
+        <div class="ayudas-detail-meta-row">
+          <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
+          <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
+        </div>
+      </div>
+      <div class="inventario-detail-actions">
+        <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openVaquitasEditModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">edit</span> Editar
+        </button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();openVaquitasDeleteModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">delete</span> Eliminar
+        </button>
+      </div>
+    </div>`;
+}
+
+function toggleVaquitasDetail(idx) {
+  if (vaquitasExpandedRow === idx) {
+    vaquitasExpandedRow = null;
+  } else {
+    vaquitasExpandedRow = idx;
+  }
+  renderVaquitasTable();
+}
+
+// ========== VAQUITAS MODALS ==========
+
+function buildVaquitasForm(cfg) {
+  const fields = cfg.formFields.map((fld) => {
+    const full = '<div class="form-group"><label class="form-label">' + fld.label + '</label><input type="' + fld.type + '" id="' + fld.id + '" class="form-input" placeholder=""></div>';
+    if (fld.type === "number") return full;
+    return full;
+  });
+  return fields.join("");
+}
+
+function setVaquitasFormValues(r, cfg) {
+  cfg.formFields.forEach((fld) => {
+    const el = document.getElementById(fld.id);
+    if (!el) return;
+    let v = r[fld.key];
+    if (fld.key === "productos" && Array.isArray(v)) v = v.join(", ");
+    el.value = (v === null || v === undefined) ? "" : v;
+  });
+}
+
+function openVaquitasEditModal(id) {
+  const mod = getVaquitasCurrentMod();
+  vaquitasCurrentMod = mod;
+  const cfg = VAQUITAS_MODS[mod];
+  const r = vaquitasAllData.find((item) => item.id === id);
+  if (!r) return;
+
+  document.getElementById("vaquitasEditId").value = id;
+  document.getElementById("vaquitasEditMod").value = mod;
+  document.getElementById("vaquitasModalTitle").textContent = "Editar registro - " + cfg.title;
+  document.getElementById("vaquitasFormFields").innerHTML = buildVaquitasForm(cfg);
+  setVaquitasFormValues(r, cfg);
+  document.getElementById("btnVaquitasModalSubmit").textContent = "Actualizar";
+  document.getElementById("vaquitasModalOverlay").style.display = "flex";
+}
+
+function openVaquitasAddModal() {
+  const mod = getVaquitasCurrentMod();
+  vaquitasCurrentMod = mod;
+  const cfg = VAQUITAS_MODS[mod];
+
+  document.getElementById("vaquitasEditId").value = "";
+  document.getElementById("vaquitasEditMod").value = mod;
+  document.getElementById("vaquitasModalTitle").textContent = "Añadir registro - " + cfg.title;
+  document.getElementById("vaquitasFormFields").innerHTML = buildVaquitasForm(cfg);
+  cfg.formFields.forEach((fld) => {
+    const el = document.getElementById(fld.id);
+    if (el) el.value = "";
+  });
+  document.getElementById("btnVaquitasModalSubmit").textContent = "Guardar";
+  document.getElementById("vaquitasModalOverlay").style.display = "flex";
+}
+
+function closeVaquitasModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("vaquitasModalOverlay").style.display = "none";
+}
+
+function getVaquitasFormData() {
+  const mod = document.getElementById("vaquitasEditMod").value || getVaquitasCurrentMod();
+  const cfg = VAQUITAS_MODS[mod];
+  const data = {};
+  cfg.formFields.forEach((fld) => {
+    const el = document.getElementById(fld.id);
+    if (!el) return;
+    data[fld.key] = el.value.trim();
+  });
+  return data;
+}
+
+async function submitVaquitasForm() {
+  const editId = document.getElementById("vaquitasEditId").value;
+  const mod = document.getElementById("vaquitasEditMod").value || getVaquitasCurrentMod();
+  const isEditing = !!editId;
+
+  const btn = document.getElementById("btnVaquitasModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const data = getVaquitasFormData();
+    let url, method;
+    if (isEditing) {
+      url = "/api/vaquitas/" + mod + "/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/vaquitas/" + mod + "/add";
+      method = "POST";
+    }
+
+    const resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al guardar");
+    }
+
+    closeVaquitasModal();
+    vaquitasExpandedRow = null;
+    await loadVaquitasRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = document.getElementById("vaquitasEditId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+function openVaquitasDeleteModal(id) {
+  document.getElementById("vaquitasDeleteId").value = id;
+  document.getElementById("vaquitasDeleteMod").value = getVaquitasCurrentMod();
+  document.getElementById("vaquitasDeleteOverlay").style.display = "flex";
+}
+
+function closeVaquitasDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("vaquitasDeleteOverlay").style.display = "none";
+}
+
+async function executeVaquitasDelete() {
+  const id = document.getElementById("vaquitasDeleteId").value;
+  const mod = document.getElementById("vaquitasDeleteMod").value || getVaquitasCurrentMod();
+  if (!id) return;
+
+  const btn = document.querySelector("#vaquitasDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+
+  try {
+    const resp = await fetch("/api/vaquitas/" + mod + "/delete/" + id, {
+      method: "DELETE",
+    });
+    if (!resp.ok) throw new Error("Error al eliminar");
+    closeVaquitasDeleteModal();
+    vaquitasExpandedRow = null;
+    await loadVaquitasRegistros();
   } catch (err) {
     alert("Ocurrio un error al eliminar. Intenta de nuevo.");
   } finally {

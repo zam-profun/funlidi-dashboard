@@ -1329,6 +1329,180 @@ async def delete_reparticion_entry(record_id: int):
     return {"success": True}
 
 
+# ========== VAQUITA DIRECTORIO + PRODUCTOS ENDPOINTS ==========
+
+VAQUITA_MODULES = {
+    "directorio": {
+        "table": "directorio_vaquitas",
+        "title": "Directorio de Clientes Vaquitas",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "productos"],
+        "num_fields": [],
+        "json_fields": ["productos"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Productos"],
+    },
+    "aguila_roja": {
+        "table": "participaciones_aguila_roja",
+        "title": "Participaciones Aguila Roja",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "cupo", "porcentaje"],
+        "num_fields": ["cupo", "porcentaje"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Cupo", "Porcentaje"],
+    },
+    "aguila_verde": {
+        "table": "participaciones_aguila_verde",
+        "title": "Participaciones Aguila Verde",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "cupos", "porcentaje"],
+        "num_fields": ["cupos", "porcentaje"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Cupos", "Porcentaje"],
+    },
+    "googolplex": {
+        "table": "participaciones_vaquita_googolplex",
+        "title": "Participaciones Vaquita Googolplex",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "cantidad", "tipo"],
+        "num_fields": ["cantidad"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Cantidad", "Tipo"],
+    },
+    "listado1": {
+        "table": "participaciones_vaquita_listado1",
+        "title": "Listado 1 - Vaquita 20 Contenedores",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro", "material_zim", "material_dinar", "material_oro"],
+        "num_fields": ["cajas_zim", "cajas_dinar", "cajas_oro"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Cajas ZIM", "Cajas DINAR", "Cajas ORO", "Material ZIM", "Material DINAR", "Material ORO"],
+    },
+    "listado2": {
+        "table": "participaciones_vaquita_listado2",
+        "title": "Listado 2 - Vaquita 20 Contenedores",
+        "fields": ["telegram_username", "nombres", "documento", "pais", "cajas_zim", "cajas_dinar", "cajas_oro", "material_zim", "material_dinar", "material_oro"],
+        "num_fields": ["cajas_zim", "cajas_dinar", "cajas_oro"],
+        "headers": ["Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais", "Cajas ZIM", "Cajas DINAR", "Cajas ORO", "Material ZIM", "Material DINAR", "Material ORO"],
+    },
+}
+
+
+def _vaquita_mod(mod):
+    cfg = VAQUITA_MODULES.get(mod)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Modulo no encontrado")
+    return cfg
+
+
+def _parse_vaquita_row(cfg, data):
+    row = {}
+    for k in cfg["fields"]:
+        if k in data:
+            v = data[k]
+            if k in cfg.get("json_fields", []):
+                if isinstance(v, list):
+                    row[k] = v
+                elif v and str(v).strip():
+                    row[k] = [x.strip() for x in str(v).replace(";", ",").split(",") if x.strip()]
+                else:
+                    row[k] = []
+            elif k in cfg["num_fields"]:
+                try:
+                    row[k] = int(float(v)) if v and str(v).strip() else None
+                except (ValueError, TypeError):
+                    row[k] = None
+            else:
+                row[k] = str(v).strip() if v and str(v).strip() else None
+    return row
+
+
+@app.get("/api/vaquitas/{mod}/data")
+async def get_vaquitas_data(mod: str):
+    cfg = _vaquita_mod(mod)
+    result = supabase_inventario.table(cfg["table"]).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+    return {"data": rows, "total": len(rows)}
+
+
+@app.post("/api/vaquitas/{mod}/add")
+async def add_vaquitas_entry(mod: str, data: dict = Body(...)):
+    cfg = _vaquita_mod(mod)
+    now = datetime.now(timezone.utc).isoformat()
+    row = _parse_vaquita_row(cfg, data)
+    row["created_at"] = now
+    row["updated_at"] = now
+    result = supabase_inventario.table(cfg["table"]).insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear el registro")
+    return {"success": True, "data": result.data[0]}
+
+
+@app.put("/api/vaquitas/{mod}/edit/{record_id}")
+async def edit_vaquitas_entry(mod: str, record_id: int, data: dict = Body(...)):
+    cfg = _vaquita_mod(mod)
+    result = supabase_inventario.table(cfg["table"]).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    row = _parse_vaquita_row(cfg, data)
+    if row:
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        supabase_inventario.table(cfg["table"]).update(row).eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/vaquitas/{mod}/delete/{record_id}")
+async def delete_vaquitas_entry(mod: str, record_id: int):
+    cfg = _vaquita_mod(mod)
+    result = supabase_inventario.table(cfg["table"]).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    supabase_inventario.table(cfg["table"]).delete().eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.get("/api/vaquitas/{mod}/download")
+async def download_vaquitas_xlsx(mod: str):
+    cfg = _vaquita_mod(mod)
+    result = supabase_inventario.table(cfg["table"]).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = cfg["title"][:30]
+
+    def fmt(v):
+        if v is None:
+            return "-"
+        if isinstance(v, list):
+            return ", ".join(str(x) for x in v)
+        return v
+
+    ws.append(cfg["headers"])
+    for r in rows:
+        ws.append([fmt(r.get(k)) for k in cfg["fields"]])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="FF8A65", end_color="FF8A65", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"{mod}_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ========== CONSULTA ENDPOINT ==========
 
 

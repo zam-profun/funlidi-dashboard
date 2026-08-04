@@ -70,6 +70,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-vaquitas {
+  --clr-primary: #26A69A;
+  --clr-primary-rgb: 38, 166, 154;
+  --clr-primary-hover: #00897B;
+  --clr-primary-dark: #00695C;
+  --clr-bg-light: #E0F2F1;
+  --clr-bg-hover: #B2DFDB;
+  --clr-border: #B2DFDB;
+  --clr-header-border: #B2DFDB;
+  --clr-warning: #F57F17;
+}
+
 * {
   margin: 0;
   padding: 0;
