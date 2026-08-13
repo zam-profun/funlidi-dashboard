@@ -34,6 +34,8 @@ if os.getenv("PASSWORD_JEOVANI"):
     _USERS["Jeovani"] = os.environ["PASSWORD_JEOVANI"]
 if os.getenv("PASSWORD_ANGEL"):
     _USERS["Angel"] = os.environ["PASSWORD_ANGEL"]
+if os.getenv("PASSWORD_ELIANA"):
+    _USERS["Eliana"] = os.environ["PASSWORD_ELIANA"]
 
 _SESSIONS = {}  # token -> {"expiry": float, "username": str}
 
