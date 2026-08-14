@@ -64,6 +64,8 @@ function initializeApp() {
   initInventarioSearch();
   initInventarioDownload();
   initInventarioProductos();
+  initLiderSearch();
+  initLiderDownload();
   initMicrolingotesSearch();
   initMicrolingotesDownload();
   initDinaresSearch();
@@ -101,12 +103,19 @@ function initModuleSelector() {
   });
 }
 
+function goLiderModule() {
+  document.getElementById("moduleSelector").value = "lider";
+  switchModule("lider");
+}
+
 function switchModule(module) {
   currentModule = module;
+  document.getElementById("btnModuleLider").classList.toggle("active", module === "lider");
   document.getElementById("nav-bot").style.display = module === "bot" ? "" : "none";
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
+  document.getElementById("nav-lider").style.display = module === "lider" ? "" : "none";
   document.getElementById("nav-microlingotes").style.display = module === "microlingotes" ? "" : "none";
   document.getElementById("nav-dinares").style.display = module === "dinares" ? "" : "none";
   document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
@@ -119,6 +128,7 @@ function switchModule(module) {
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
   document.body.classList.toggle("theme-inventario", module === "inventario");
+  document.body.classList.toggle("theme-lider", module === "lider");
   document.body.classList.toggle("theme-microlingotes", module === "microlingotes");
   document.body.classList.toggle("theme-dinares", module === "dinares");
   document.body.classList.toggle("theme-farley", module === "farley");
@@ -158,6 +168,9 @@ function switchSection(section) {
     "inventario-estadisticas": "Estadisticas - Inventario",
     "inventario-descargar": "Descargar - Inventario",
     "inventario-productos": "Productos - Inventario",
+    "lider-registros": "Registros - Lider",
+    "lider-estadisticas": "Estadisticas - Lider",
+    "lider-descargar": "Descargar - Lider",
     "microlingotes-registros": "Registros - Microlingotes",
     "microlingotes-estadisticas": "Estadisticas - Microlingotes",
     "microlingotes-descargar": "Descargar - Microlingotes",
@@ -195,6 +208,8 @@ function loadSection(section) {
   if (section === "inventario-registros") loadInventarioRegistros();
   if (section === "inventario-estadisticas") loadInventarioStats();
   if (section === "inventario-productos") loadInventarioProductos();
+  if (section === "lider-registros") loadLiderRegistros();
+  if (section === "lider-estadisticas") loadLiderStats();
   if (section === "microlingotes-registros") loadMicrolingotesRegistros();
   if (section === "microlingotes-estadisticas") loadMicrolingotesStats();
   if (section === "dinares-registros") loadDinaresRegistros();
@@ -4348,5 +4363,427 @@ function buildVerificacionCard(p) {
       compRows +
     '</div>'
   );
+}
+
+// ========== LIDER CANAL ==========
+
+let liderAllData = [];
+let liderExpandedFilterIdx = null;
+let liderEntriesCache = {};
+
+function initLiderSearch() {
+  const searchInput = document.getElementById("liderSearchInput");
+  if (searchInput) searchInput.addEventListener("input", renderLiderTable);
+  const liderFilter = document.getElementById("liderLiderFilter");
+  if (liderFilter) liderFilter.addEventListener("change", renderLiderTable);
+  const btnAdd = document.getElementById("btnLiderAdd");
+  if (btnAdd) btnAdd.addEventListener("click", function() { openLiderAddModal(); });
+}
+
+function initLiderDownload() {
+  const btn = document.getElementById("btnLiderDownload");
+  if (!btn) return;
+  btn.addEventListener("click", async function() {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    const info = document.getElementById("liderDownloadInfo");
+    try {
+      const resp = await fetch("/api/lider/download");
+      if (!resp.ok) throw new Error("Error");
+      const blob = await resp.blob();
+      const cd = resp.headers.get("Content-Disposition") || "";
+      let filename = "Lider_Canal.xlsx";
+      const m = cd.match(/filename="(.+?)"/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if (info) info.textContent = "Descarga completada.";
+    } catch (err) {
+      if (info) info.textContent = "Error al descargar el archivo.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">description</span> Descargar XLSX';
+    }
+  });
+}
+
+async function loadLiderRegistros() {
+  const tbody = document.getElementById("liderTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  try {
+    const resp = await fetch("/api/lider/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    liderAllData = json.data || [];
+    liderExpandedFilterIdx = null;
+    renderLiderTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function liderFlagLabel(lider) {
+  if (lider === "MARIA") return "MARIA ELVIRA SUS";
+  if (lider === "OTRO") return "OTRO";
+  return "N/A";
+}
+
+function liderBadge(lider) {
+  if (lider === "MARIA") return '<span class="estado-badge estado-completo">MARIA ELVIRA</span>';
+  if (lider === "OTRO") return '<span class="estado-badge estado-incompleto">OTRO</span>';
+  return '<span class="estado-badge" style="background:#EEEEEE;color:#9E9E9E">N/A</span>';
+}
+
+function liderSelectHtml(r) {
+  const cur = r.lider || "";
+  const uname = (r.telegram_username || "").replace(/"/g, "");
+  return '<select class="lider-select" data-username="' + escHtml(uname) + '" onchange="setLiderFlag(this)" title="Cambiar LIDER">' +
+    '<option value=""' + (cur === "" ? " selected" : "") + '>N/A</option>' +
+    '<option value="MARIA"' + (cur === "MARIA" ? " selected" : "") + '>MARIA ELVIRA</option>' +
+    '<option value="OTRO"' + (cur === "OTRO" ? " selected" : "") + '>OTRO</option>' +
+    '</select>';
+}
+
+async function setLiderFlag(selectEl) {
+  const username = selectEl.getAttribute("data-username");
+  const lider = selectEl.value;
+  if (!username) {
+    selectEl.value = "";
+    alert("Este registro no tiene usuario de Telegram para asignar LIDER.");
+    return;
+  }
+  try {
+    const resp = await fetch("/api/lider/set-lider", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegram_username: username, lider: lider }),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al actualizar");
+    }
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al actualizar el lider.");
+    await loadLiderRegistros();
+  }
+}
+
+function liderBracketMemb(r) {
+  const o = (r.origenes || {}).membresias || {};
+  const parts = [];
+  if (o.regaladas) parts.push(o.regaladas + " regaladas");
+  if (o.sorteo) parts.push(o.sorteo + " sorteo");
+  if (o.compradas) parts.push(o.compradas + " compradas");
+  return parts.length ? '<div class="lider-bracket">' + parts.join(", ") + '</div>' : "";
+}
+
+function liderBracketPer(r) {
+  const o = (r.origenes || {}).pergaminos || {};
+  const parts = [];
+  if (o.regalados) parts.push(o.regalados + " regalados");
+  if (o.sorteo) parts.push(o.sorteo + " sorteo");
+  if (o.comprados) parts.push(o.comprados + " comprados");
+  return parts.length ? '<div class="lider-bracket">' + parts.join(", ") + '</div>' : "";
+}
+
+async function toggleLiderDetail(filterIdx) {
+  liderExpandedFilterIdx = liderExpandedFilterIdx === filterIdx ? null : filterIdx;
+  if (liderExpandedFilterIdx !== null) {
+    const p = liderAllData.filter(function(r) {
+      const s = document.getElementById("liderSearchInput") ? document.getElementById("liderSearchInput").value.toLowerCase() : "";
+      const f = document.getElementById("liderLiderFilter") ? document.getElementById("liderLiderFilter").value : "";
+      let ok = true;
+      if (s) {
+        ok = [r.nombre_completo, r.documento, r.pais, r.telegram_username].some(function(v) {
+          return v && String(v).toLowerCase().includes(s);
+        });
+      }
+      if (ok && f === "MARIA") ok = r.lider === "MARIA";
+      else if (ok && f === "OTRO") ok = r.lider === "OTRO";
+      else if (ok && f === "NA") ok = !r.lider;
+      return ok;
+    })[filterIdx];
+    if (p && p.telegram_username && !liderEntriesCache[p.telegram_username]) {
+      try {
+        const resp = await fetch("/api/lider/entradas?username=" + encodeURIComponent(p.telegram_username));
+        if (resp.ok) {
+          const json = await resp.json();
+          liderEntriesCache[p.telegram_username] = json.data || [];
+        }
+      } catch (e) {}
+    }
+  }
+  renderLiderTable();
+}
+
+function liderDetailHtml(r) {
+  const f = function(v) {
+    if (v && String(v).trim() && String(v).trim().toUpperCase() !== "VACIO") return String(v).trim();
+    return "—";
+  };
+  const flag = getCountryFlag(r.pais);
+  const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
+  const entries = (r.telegram_username && liderEntriesCache[r.telegram_username]) || [];
+
+  let entriesHtml = "";
+  if (entries.length === 0) {
+    entriesHtml = '<div style="padding:14px;color:#9E9E9E;font-size:13px">Sin entradas registradas.</div>';
+  } else {
+    entriesHtml = '<div class="table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>Origen</th><th>Membresias</th><th>Material 1</th><th>Pergaminos</th><th>Material 2</th><th style="width:88px"></th></tr></thead><tbody>';
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      entriesHtml += '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td>' + escHtml(e.origen || "—") + '</td>' +
+        '<td class="text-right">' + (e.cantidad_1 || 0) + '</td>' +
+        '<td style="font-size:11px">' + escHtml(e.material_1 || "—") + '</td>' +
+        '<td class="text-right">' + (e.cantidad_2 || 0) + '</td>' +
+        '<td style="font-size:11px">' + escHtml(e.material_2 || "—") + '</td>' +
+        '<td style="text-align:right;white-space:nowrap">' +
+          '<span class="material-icons ayudas-action-icon" title="Editar" onclick="event.stopPropagation();openLiderEditModal(' + e.id + ')">edit</span> ' +
+          '<span class="material-icons ayudas-action-icon" title="Eliminar" style="color:#ef5350" onclick="event.stopPropagation();openLiderDeleteModal(' + e.id + ')">delete</span>' +
+        '</td></tr>';
+    }
+    entriesHtml += '</tbody></table></div>';
+  }
+
+  return '<div class="ayudas-detail-card">' +
+    '<div class="ayudas-detail-section">' +
+      '<div class="ayudas-detail-title"><span class="material-icons">person</span> INFORMACION PERSONAL</div>' +
+      '<div class="ayudas-detail-grid">' +
+        '<div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">' + escHtml(f(r.nombre_completo)) + '</span></div>' +
+        '<div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Documento:</span><span class="ayudas-detail-value">' + escHtml(f(r.documento)) + '</span></div>' +
+        '<div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">' + flag + ' ' + escHtml(f(r.pais)) + '</span></div>' +
+        '<div class="ayudas-detail-item"><span class="material-icons">alternate_email</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">' + escHtml(usuario) + '</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ayudas-detail-section">' +
+      '<div class="ayudas-detail-title"><span class="material-icons">inventory_2</span> MATERIALES</div>' +
+      '<div class="ayudas-detail-grid">' +
+        '<div class="ayudas-detail-item"><span class="material-icons">confirmation_number</span><span class="ayudas-detail-label">Membresias:</span><span class="ayudas-detail-value">' + (r.total_membresias || 0) + '</span></div>' +
+        '<div class="ayudas-detail-item"><span class="material-icons">description</span><span class="ayudas-detail-label">Pergaminos:</span><span class="ayudas-detail-value">' + (r.total_pergaminos || 0) + '</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ayudas-detail-section">' +
+      '<div class="ayudas-detail-title"><span class="material-icons">supervisor_account</span> LIDER ELEGIDO</div>' +
+      '<div class="ayudas-detail-grid">' +
+        '<div class="ayudas-detail-item"><span class="material-icons">check_circle</span><span class="ayudas-detail-label">Lider:</span><span class="ayudas-detail-value">' + liderBadge(r.lider) + '</span></div>' +
+        '<div class="ayudas-detail-item"><span class="material-icons">schedule</span><span class="ayudas-detail-label">Actualizado:</span><span class="ayudas-detail-value">' + (r.lider_updated_at ? formatDate(r.lider_updated_at) : "—") + '</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ayudas-detail-section">' +
+      '<div class="ayudas-detail-title"><span class="material-icons">list_alt</span> ENTRADAS (' + entries.length + ')</div>' +
+      entriesHtml +
+    '</div>' +
+    '<div class="inventario-detail-actions">' +
+      '<button class="btn btn-sm btn-edit" onclick="openLiderAddModal()"><span class="material-icons" style="font-size:16px">add</span> A&ntilde;adir entrada</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderLiderTable() {
+  const tbody = document.getElementById("liderTableBody");
+  if (!tbody) return;
+  const search = document.getElementById("liderSearchInput") ? document.getElementById("liderSearchInput").value.toLowerCase() : "";
+  const liderFilter = document.getElementById("liderLiderFilter") ? document.getElementById("liderLiderFilter").value : "";
+
+  let filtered = liderAllData;
+  if (search) {
+    filtered = filtered.filter(function(r) {
+      return [r.nombre_completo, r.documento, r.pais, r.telegram_username].some(function(v) {
+        return v && String(v).toLowerCase().includes(search);
+      });
+    });
+  }
+  if (liderFilter === "MARIA") filtered = filtered.filter(function(r) { return r.lider === "MARIA"; });
+  else if (liderFilter === "OTRO") filtered = filtered.filter(function(r) { return r.lider === "OTRO"; });
+  else if (liderFilter === "NA") filtered = filtered.filter(function(r) { return !r.lider; });
+
+  document.getElementById("liderTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search || liderFilter ? "No se encontraron registros con esos filtros." : "Aun no hay registros de Lider.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const flag = getCountryFlag(r.pais);
+    const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
+    const isExpanded = liderExpandedFilterIdx === i;
+    const expandIcon = isExpanded ? "expand_less" : "expand_more";
+
+    html += '<tr class="ayudas-row" onclick="toggleLiderDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td><strong>' + escHtml(r.nombre_completo || "—") + '</strong></td>';
+    html += '<td>' + escHtml(usuario) + '</td>';
+    html += '<td>' + escHtml(r.documento || "—") + '</td>';
+    html += '<td>' + flag + ' ' + escHtml(r.pais || "—") + '</td>';
+    html += '<td class="text-right"><strong>' + (r.total_membresias || 0) + '</strong>' + liderBracketMemb(r) + '</td>';
+    html += '<td class="text-right"><strong>' + (r.total_pergaminos || 0) + '</strong>' + liderBracketPer(r) + '</td>';
+    html += '<td>' + liderSelectHtml(r) + '</td>';
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="8">' + liderDetailHtml(r) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+async function loadLiderStats() {
+  const el = document.getElementById("liderStatsGrid");
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  try {
+    const resp = await fetch("/api/lider/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+    const origenMap = {
+      REGALADO: "Regalados",
+      MEMBRESIA_SORTEO: "Membresias por sorteo",
+      PERGAMINO_SORTEO: "Pergaminos por sorteo",
+      COMPRADO: "Comprados",
+    };
+    const origenHtml = Object.keys(d.origenes || {}).map(function(o) {
+      return '<div class="stat-card"><span class="material-icons stat-icon">category</span><div class="stat-info"><span class="stat-value">' + d.origenes[o] + '</span><span class="stat-label">' + (origenMap[o] || o) + '</span></div></div>';
+    }).join("");
+
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total_personas + '</span><span class="stat-label">Total de personas</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">list_alt</span><div class="stat-info"><span class="stat-value">' + d.total_entradas + '</span><span class="stat-label">Total de entradas</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">confirmation_number</span><div class="stat-info"><span class="stat-value">' + d.total_membresias + '</span><span class="stat-label">Total membresias</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">description</span><div class="stat-info"><span class="stat-value">' + d.total_pergaminos + '</span><span class="stat-label">Total pergaminos</span></div></div>' +
+      '<div class="stat-card" style="border-color:#81C784"><span class="material-icons stat-icon" style="color:#43A047">supervisor_account</span><div class="stat-info"><span class="stat-value">' + d.lider_maria + '</span><span class="stat-label">Lider MARIA ELVIRA</span></div></div>' +
+      '<div class="stat-card" style="border-color:#90CAF9"><span class="material-icons stat-icon" style="color:#1E88E5">person</span><div class="stat-info"><span class="stat-value">' + d.lider_otro + '</span><span class="stat-label">Lider OTRO</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">help_outline</span><div class="stat-info"><span class="stat-value">' + d.lider_na + '</span><span class="stat-label">Lider N/A</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">public</span><div class="stat-info"><span class="stat-value">' + d.paises + '</span><span class="stat-label">Paises</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value stat-date">' + (d.ultima_actualizacion ? formatDateStrict(d.ultima_actualizacion) : "—") + '</span><span class="stat-label">Ultima actualizacion</span></div></div>' +
+      origenHtml;
+
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}
+
+// ========== LIDER CRUD (entradas) ==========
+
+function findLiderEntryById(id) {
+  for (const p of liderAllData) {
+    const entries = (p.telegram_username && liderEntriesCache[p.telegram_username]) || [];
+    const found = entries.find(function(e) { return e.id === id; });
+    if (found) return found;
+  }
+  return null;
+}
+
+function openLiderAddModal() {
+  document.getElementById("liderEditId").value = "";
+  document.getElementById("liderModalTitle").textContent = "A&ntilde;adir entrada";
+  document.getElementById("liderFormUsername").value = "";
+  document.getElementById("liderFormNombre").value = "";
+  document.getElementById("liderFormDocumento").value = "";
+  document.getElementById("liderFormPais").value = "";
+  document.getElementById("liderFormCant1").value = "0";
+  document.getElementById("liderFormMat1").value = "MEMBRESIA DE 100 BI";
+  document.getElementById("liderFormCant2").value = "0";
+  document.getElementById("liderFormMat2").value = "PERGAMINOS ALEMANES DORADOS";
+  document.getElementById("liderFormOrigen").value = "REGALADO";
+  document.getElementById("btnLiderModalSubmit").textContent = "Guardar";
+  document.getElementById("liderModalOverlay").style.display = "flex";
+}
+
+function openLiderEditModal(id) {
+  const entry = findLiderEntryById(id);
+  if (!entry) return;
+  document.getElementById("liderEditId").value = id;
+  document.getElementById("liderModalTitle").textContent = "Editar entrada";
+  document.getElementById("liderFormUsername").value = entry.telegram_username || "";
+  document.getElementById("liderFormNombre").value = entry.nombre_completo || "";
+  document.getElementById("liderFormDocumento").value = entry.documento || "";
+  document.getElementById("liderFormPais").value = entry.pais || "";
+  document.getElementById("liderFormCant1").value = entry.cantidad_1 || 0;
+  document.getElementById("liderFormMat1").value = entry.material_1 || "";
+  document.getElementById("liderFormCant2").value = entry.cantidad_2 || 0;
+  document.getElementById("liderFormMat2").value = entry.material_2 || "";
+  document.getElementById("liderFormOrigen").value = entry.origen || "REGALADO";
+  document.getElementById("btnLiderModalSubmit").textContent = "Guardar";
+  document.getElementById("liderModalOverlay").style.display = "flex";
+}
+
+function closeLiderModal(e) {
+  const overlay = document.getElementById("liderModalOverlay");
+  if (e && e.target !== overlay) return;
+  overlay.style.display = "none";
+}
+
+async function submitLiderForm() {
+  const id = document.getElementById("liderEditId").value;
+  const body = {
+    telegram_username: document.getElementById("liderFormUsername").value.trim().replace(/^@/, ""),
+    nombre_completo: document.getElementById("liderFormNombre").value.trim(),
+    documento: document.getElementById("liderFormDocumento").value.trim(),
+    pais: document.getElementById("liderFormPais").value.trim(),
+    cantidad_1: document.getElementById("liderFormCant1").value,
+    material_1: document.getElementById("liderFormMat1").value.trim(),
+    cantidad_2: document.getElementById("liderFormCant2").value,
+    material_2: document.getElementById("liderFormMat2").value.trim(),
+    origen: document.getElementById("liderFormOrigen").value,
+  };
+  try {
+    const url = id ? "/api/lider/entradas/edit/" + id : "/api/lider/entradas/add";
+    const resp = await fetch(url, {
+      method: id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al guardar");
+    }
+    closeLiderModal();
+    liderEntriesCache = {};
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al guardar.");
+  }
+}
+
+function openLiderDeleteModal(id) {
+  document.getElementById("liderDeleteId").value = id;
+  document.getElementById("liderDeleteOverlay").style.display = "flex";
+}
+
+function closeLiderDeleteModal(e) {
+  const overlay = document.getElementById("liderDeleteOverlay");
+  if (e && e.target !== overlay) return;
+  overlay.style.display = "none";
+}
+
+async function executeLiderDelete() {
+  const id = document.getElementById("liderDeleteId").value;
+  try {
+    const resp = await fetch("/api/lider/entradas/delete/" + id, { method: "DELETE" });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al eliminar");
+    }
+    closeLiderDeleteModal();
+    liderEntriesCache = {};
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al eliminar.");
+  }
 }
 

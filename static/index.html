@@ -11,6 +11,10 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <span class="material-icons sidebar-logo">assignment</span>
+      <button class="header-module-btn" id="btnModuleLider" title="BOT - LIDER" onclick="goLiderModule()">
+        <span class="material-icons">diversity_3</span>
+        <span class="header-module-btn-label">LIDER</span>
+      </button>
       <div class="sidebar-header-text">
         <h1>FUNLIDI</h1>
         <select id="moduleSelector" class="module-selector">
@@ -18,6 +22,7 @@
           <option value="pagos">FUNLIDI - PAGOS</option>
           <option value="ayudas">BOT - AYUDAS H.</option>
           <option value="inventario">BOT - INVENTARIO</option>
+          <option value="lider">BOT - LIDER</option>
           <option value="microlingotes">BORRADOR - MICROLINGOTES</option>
           <option value="dinares">BORRADOR - DINARES</option>
           <option value="consulta">CONSULTA GENERAL</option>
@@ -98,6 +103,20 @@
       <button class="nav-btn" data-section="inventario-productos">
         <span class="material-icons">inventory_2</span>
         <span>Productos</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-lider" style="display:none">
+      <button class="nav-btn active" data-section="lider-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="lider-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="lider-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
       </button>
     </nav>
     <nav class="sidebar-nav" id="nav-microlingotes" style="display:none">
@@ -964,6 +983,174 @@
         <p class="download-info" id="dinaresDownloadInfo"></p>
       </div>
     </section>
+
+    <!-- ========== LIDER SECTIONS ========== -->
+
+    <section class="content-section" id="section-lider-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Personas del listado del Canal con sus Membresias y Pergaminos, el desglose por origen (regalado / sorteo / comprado) y el LIDER elegido. Haz clic en una fila para ver sus entradas individuales.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="liderSearchInput" placeholder="Buscar por nombre, documento, pais, @usuario..." class="search-input">
+        </div>
+        <select id="liderLiderFilter" class="flayer-filter">
+          <option value="">Todos los lideres</option>
+          <option value="MARIA">MARIA ELVIRA</option>
+          <option value="OTRO">OTRO</option>
+          <option value="NA">N/A</option>
+        </select>
+        <button class="btn btn-add" id="btnLiderAdd">
+          <span class="material-icons">add</span>
+          A&ntilde;adir
+        </button>
+        <span class="table-count" id="liderTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="liderTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nombres y Apellidos</th>
+              <th>Usuario TG</th>
+              <th>Documento</th>
+              <th>Pa&iacute;s</th>
+              <th>Membresias</th>
+              <th>Pergaminos</th>
+              <th>LIDER</th>
+            </tr>
+          </thead>
+          <tbody id="liderTableBody">
+            <tr class="empty-row">
+              <td colspan="8">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-lider-estadisticas">
+      <div class="stats-grid" id="liderStatsGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <section class="content-section" id="section-lider-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargar&aacute; un archivo de Excel con todas las personas del listado, sus totales de Membresias y Pergaminos, el desglose por origen y el LIDER elegido.</p>
+        <button class="btn btn-download" id="btnLiderDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="liderDownloadInfo"></p>
+      </div>
+    </section>
+
+    <!-- ========== LIDER MODALS ========== -->
+
+    <div class="modal-overlay" id="liderModalOverlay" style="display:none" onclick="closeLiderModal(event)">
+      <div class="modal" id="liderModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">diversity_3</span>
+          <span class="modal-title" id="liderModalTitle">A&ntilde;adir entrada</span>
+          <span class="material-icons modal-close" onclick="closeLiderModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="liderEditId" value="">
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Usuario Telegram @ <span class="form-label-hint">(opcional si hay nombre)</span></label>
+              <input type="text" id="liderFormUsername" class="form-input" placeholder="@usuario">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="liderFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">C&eacute;dula / DNI</label>
+              <input type="text" id="liderFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pa&iacute;s</label>
+              <input type="text" id="liderFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+
+          <div class="form-divider">MEMBRESIA</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cantidad</label>
+              <input type="number" id="liderFormCant1" class="form-input" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Material</label>
+              <input type="text" id="liderFormMat1" class="form-input" value="MEMBRESIA DE 100 BI">
+            </div>
+          </div>
+
+          <div class="form-divider">PERGAMINO</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cantidad</label>
+              <input type="number" id="liderFormCant2" class="form-input" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Material</label>
+              <input type="text" id="liderFormMat2" class="form-input" value="PERGAMINOS ALEMANES DORADOS">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Origen</label>
+              <select id="liderFormOrigen" class="form-input">
+                <option value="REGALADO">Regalado</option>
+                <option value="MEMBRESIA_SORTEO">Membresia ganada en sorteo</option>
+                <option value="PERGAMINO_SORTEO">Pergamino ganado en sorteo</option>
+                <option value="COMPRADO">Comprado</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" onclick="closeLiderModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnLiderModalSubmit" onclick="submitLiderForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="liderDeleteOverlay" style="display:none" onclick="closeLiderDeleteModal(event)">
+      <div class="modal modal-sm" id="liderDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar entrada</span>
+          <span class="material-icons modal-close" onclick="closeLiderDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">&iquest;Seguro de eliminar esta entrada?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acci&oacute;n no se puede deshacer.</p>
+          <input type="hidden" id="liderDeleteId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeLiderDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeLiderDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ========== CONSULTA SECTION ========== -->
 

@@ -1664,6 +1664,315 @@ async def set_dinares_validacion(data: dict = Body(...)):
     return {"success": True, "validado": validado}
 
 
+# ========== LIDER CANAL ENDPOINTS ==========
+
+LIDER_TABLE = "lider_entradas"
+LIDER_FLAG_TABLE = "lider_validaciones"
+LIDER_ORIGENES = ["REGALADO", "MEMBRESIA_SORTEO", "PERGAMINO_SORTEO", "COMPRADO"]
+LIDER_ENTRADA_FIELDS = ["telegram_username", "nombre_completo", "documento", "pais",
+                        "cantidad_1", "material_1", "cantidad_2", "material_2", "origen"]
+
+
+def _lider_norm_user(value):
+    if not value:
+        return ""
+    s = str(value).strip()
+    if s.startswith("@"):
+        s = s[1:]
+    return s.strip().lower()
+
+
+def _lider_to_int(v):
+    if v is None or str(v).strip() == "":
+        return 0
+    try:
+        return int(float(str(v)))
+    except Exception:
+        return 0
+
+
+def _lider_flags_map():
+    res = supabase_inventario.table(LIDER_FLAG_TABLE).select("*").execute()
+    m = {}
+    for f in (res.data or []):
+        key = (f.get("telegram_username") or "").strip().lower()
+        if key:
+            m[key] = f
+    return m
+
+
+def _lider_attach_flags(persons):
+    flags = _lider_flags_map()
+    for p in persons:
+        f = flags.get((p.get("telegram_username") or "").strip().lower())
+        p["lider"] = (f or {}).get("lider")
+        p["lider_telegram_user_id"] = (f or {}).get("telegram_user_id")
+        p["lider_updated_at"] = (f or {}).get("updated_at")
+    return persons
+
+
+def _lider_persons(rows):
+    persons = {}
+    for r in rows:
+        u = (r.get("telegram_username") or "").strip().lower()
+        if not u:
+            continue
+        p = persons.setdefault(u, {
+            "telegram_username": r.get("telegram_username"),
+            "nombre_completo": None,
+            "documento": None,
+            "pais": None,
+            "total_membresias": 0,
+            "total_pergaminos": 0,
+            "num_entradas": 0,
+            "created_at": None,
+            "updated_at": None,
+            "origenes": {
+                "membresias": {"regaladas": 0, "sorteo": 0, "compradas": 0},
+                "pergaminos": {"regalados": 0, "sorteo": 0, "comprados": 0},
+            },
+        })
+        p["nombre_completo"] = p["nombre_completo"] or r.get("nombre_completo")
+        p["documento"] = p["documento"] or r.get("documento")
+        p["pais"] = p["pais"] or r.get("pais")
+        c_created = r.get("created_at")
+        c_updated = r.get("updated_at")
+        if c_created and (not p["created_at"] or c_created < p["created_at"]):
+            p["created_at"] = c_created
+        if c_updated and (not p["updated_at"] or c_updated > p["updated_at"]):
+            p["updated_at"] = c_updated
+        c1 = _lider_to_int(r.get("cantidad_1"))
+        c2 = _lider_to_int(r.get("cantidad_2"))
+        p["total_membresias"] += c1
+        p["total_pergaminos"] += c2
+        p["num_entradas"] += 1
+        o = r.get("origen")
+        if o == "REGALADO":
+            p["origenes"]["membresias"]["regaladas"] += c1
+            p["origenes"]["pergaminos"]["regalados"] += c2
+        elif o == "MEMBRESIA_SORTEO":
+            p["origenes"]["membresias"]["sorteo"] += c1
+        elif o == "PERGAMINO_SORTEO":
+            p["origenes"]["pergaminos"]["sorteo"] += c2
+        elif o == "COMPRADO":
+            p["origenes"]["membresias"]["compradas"] += c1
+            p["origenes"]["pergaminos"]["comprados"] += c2
+    out = list(persons.values())
+    out.sort(key=lambda x: (x.get("nombre_completo") or "").upper())
+    return _lider_attach_flags(out)
+
+
+@app.get("/api/lider/data")
+async def get_lider_data():
+    result = supabase_inventario.table(LIDER_TABLE).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+    persons = _lider_persons(rows)
+    return {"data": persons, "total": len(persons), "total_entradas": len(rows)}
+
+
+@app.get("/api/lider/entradas")
+async def get_lider_entradas(username: str = ""):
+    q = supabase_inventario.table(LIDER_TABLE).select("*").order("id", desc=True)
+    if username:
+        q = q.eq("telegram_username", _lider_norm_user(username))
+    result = q.execute()
+    rows = result.data or []
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/lider/stats")
+async def get_lider_stats():
+    result = supabase_inventario.table(LIDER_TABLE).select("*").execute()
+    rows = result.data or []
+    persons = _lider_persons(rows)
+    total_personas = len(persons)
+    total_membresias = sum(_lider_to_int(r.get("cantidad_1")) for r in rows)
+    total_pergaminos = sum(_lider_to_int(r.get("cantidad_2")) for r in rows)
+    total_entradas = len(rows)
+
+    lider_maria = sum(1 for p in persons if p.get("lider") == "MARIA")
+    lider_otro = sum(1 for p in persons if p.get("lider") == "OTRO")
+    lider_na = total_personas - lider_maria - lider_otro
+
+    origen_counts = {}
+    for r in rows:
+        o = r.get("origen") or "DESCONOCIDO"
+        origen_counts[o] = origen_counts.get(o, 0) + 1
+
+    paises = {
+        str(r.get("pais")).strip().upper()
+        for r in rows
+        if r.get("pais") and str(r.get("pais")).strip() and str(r.get("pais")).strip().upper() != "VACIO"
+    }
+    ultima = max(
+        (r.get("updated_at") or r.get("created_at") or "") for r in rows
+    ) if rows else None
+
+    return {
+        "total_personas": total_personas,
+        "total_entradas": total_entradas,
+        "total_membresias": total_membresias,
+        "total_pergaminos": total_pergaminos,
+        "lider_maria": lider_maria,
+        "lider_otro": lider_otro,
+        "lider_na": lider_na,
+        "origenes": origen_counts,
+        "paises": len(paises),
+        "ultima_actualizacion": ultima,
+    }
+
+
+@app.get("/api/lider/download")
+async def download_lider_xlsx():
+    result = supabase_inventario.table(LIDER_TABLE).select("*").order("id", desc=True).execute()
+    rows = result.data or []
+    persons = _lider_persons(rows)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Lider Canal"
+
+    headers = [
+        "Usuario Telegram", "Nombres y Apellidos", "Cedula/DNI", "Pais",
+        "Total Membresias", "Total Pergaminos", "Entradas",
+        "Membresias Regaladas", "Membresias Sorteo", "Membresias Compradas",
+        "Pergaminos Regalados", "Pergaminos Sorteo", "Pergaminos Comprados",
+        "Lider",
+    ]
+    ws.append(headers)
+
+    for p in persons:
+        lider_txt = "N/A"
+        if p.get("lider") == "MARIA":
+            lider_txt = "MARIA ELVIRA SUS"
+        elif p.get("lider") == "OTRO":
+            lider_txt = "OTRO"
+        usuario = p.get("telegram_username") or "-"
+        if usuario and not str(usuario).startswith("@"):
+            usuario = "@" + usuario
+        o = p.get("origenes") or {}
+        ws.append([
+            usuario,
+            p.get("nombre_completo") or "-",
+            p.get("documento") or "-",
+            p.get("pais") or "-",
+            _lider_to_int(p.get("total_membresias")),
+            _lider_to_int(p.get("total_pergaminos")),
+            _lider_to_int(p.get("num_entradas")),
+            _lider_to_int(o.get("membresias", {}).get("regaladas")),
+            _lider_to_int(o.get("membresias", {}).get("sorteo")),
+            _lider_to_int(o.get("membresias", {}).get("compradas")),
+            _lider_to_int(o.get("pergaminos", {}).get("regalados")),
+            _lider_to_int(o.get("pergaminos", {}).get("sorteo")),
+            _lider_to_int(o.get("pergaminos", {}).get("comprados")),
+            lider_txt,
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="BA68C8", end_color="BA68C8", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"Lider_Canal_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _parse_lider_entrada(data):
+    row = {}
+    for k in LIDER_ENTRADA_FIELDS:
+        if k not in data:
+            continue
+        v = data[k]
+        if k in ("cantidad_1", "cantidad_2"):
+            row[k] = _lider_to_int(v)
+        elif k == "origen":
+            o = str(v or "").strip().upper()
+            row[k] = o if o in LIDER_ORIGENES else "REGALADO"
+        else:
+            row[k] = str(v).strip() if v and str(v).strip() else None
+    return row
+
+
+@app.post("/api/lider/entradas/add")
+async def add_lider_entrada(data: dict = Body(...)):
+    row = _parse_lider_entrada(data)
+    username = row.get("telegram_username")
+    nombre = row.get("nombre_completo")
+    if not username and not nombre:
+        raise HTTPException(status_code=400, detail="El usuario de Telegram o el nombre es obligatorio")
+    now = datetime.now(timezone.utc).isoformat()
+    row["created_at"] = now
+    row["updated_at"] = now
+    result = supabase_inventario.table(LIDER_TABLE).insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear la entrada")
+    return {"success": True, "data": result.data[0]}
+
+
+@app.put("/api/lider/entradas/edit/{record_id}")
+async def edit_lider_entrada(record_id: int, data: dict = Body(...)):
+    result = supabase_inventario.table(LIDER_TABLE).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    row = _parse_lider_entrada(data)
+    if not row:
+        raise HTTPException(status_code=400, detail="No hay campos para actualizar")
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    supabase_inventario.table(LIDER_TABLE).update(row).eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/lider/entradas/delete/{record_id}")
+async def delete_lider_entrada(record_id: int):
+    result = supabase_inventario.table(LIDER_TABLE).select("id").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    supabase_inventario.table(LIDER_TABLE).delete().eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.post("/api/lider/set-lider")
+async def set_lider_flag(data: dict = Body(...)):
+    username = _lider_norm_user(data.get("telegram_username"))
+    if not username:
+        raise HTTPException(status_code=400, detail="Usuario de Telegram requerido")
+    lider = data.get("lider")
+    if lider not in ("MARIA", "OTRO"):
+        lider = None
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "telegram_username": username,
+        "lider": lider,
+        "updated_at": now,
+    }
+    if data.get("telegram_user_id") is not None:
+        row["telegram_user_id"] = data["telegram_user_id"]
+    supabase_inventario.table(LIDER_FLAG_TABLE).upsert(row, on_conflict="telegram_username").execute()
+    return {"success": True, "lider": lider}
+
+
 # ========== REPARTICION VAQUITA ENDPOINTS ==========
 
 REPARTICION_TABLE = "reparticion_vaquita"
