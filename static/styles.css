@@ -46,6 +46,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-dinares {
+  --clr-primary: #E53935;
+  --clr-primary-rgb: 229, 57, 53;
+  --clr-primary-hover: #C62828;
+  --clr-primary-dark: #B71C1C;
+  --clr-bg-light: #FFEBEE;
+  --clr-bg-hover: #FFCDD2;
+  --clr-border: #EF9A9A;
+  --clr-header-border: #EF9A9A;
+  --clr-warning: #F57F17;
+}
+
 .theme-verificacion {
   --clr-primary: #4DB6AC;
   --clr-primary-rgb: 77, 182, 172;

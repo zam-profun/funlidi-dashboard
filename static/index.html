@@ -19,6 +19,7 @@
           <option value="ayudas">BOT - AYUDAS H.</option>
           <option value="inventario">BOT - INVENTARIO</option>
           <option value="microlingotes">BORRADOR - MICROLINGOTES</option>
+          <option value="dinares">BORRADOR - DINARES</option>
           <option value="consulta">CONSULTA GENERAL</option>
           <option value="farley">B. DATOS - FARLEY</option>
           <option value="verificacion">VERIFICACIÓN</option>
@@ -109,6 +110,20 @@
         <span>Estadisticas</span>
       </button>
       <button class="nav-btn" data-section="microlingotes-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-dinares" style="display:none">
+      <button class="nav-btn active" data-section="dinares-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="dinares-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="dinares-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
@@ -880,6 +895,76 @@
       </div>
     </section>
 
+    <!-- ========== DINARES SECTIONS ========== -->
+
+    <section class="content-section" id="section-dinares-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Personas del listado de dinares iraquíes rojos. Usa el interruptor para marcar/desmarcar si la persona ya validó su información con el bot. Haz clic en una fila para ver el detalle.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="dinaresSearchInput" placeholder="Buscar por nombre, documento, país, @usuario..." class="search-input">
+        </div>
+        <select id="dinaresValidadoFilter" class="flayer-filter">
+          <option value="">Todos los estados</option>
+          <option value="validado">Validado</option>
+          <option value="novalidado">No validado</option>
+        </select>
+        <button class="btn btn-add" id="btnDinaresAdd">
+          <span class="material-icons">add</span>
+          Añadir
+        </button>
+        <span class="table-count" id="dinaresTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="dinaresTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nombres y Apellidos</th>
+              <th>Usuario TG</th>
+              <th>Documento</th>
+              <th>Pais</th>
+              <th>Cajas</th>
+              <th>Validado</th>
+              <th>Validado el</th>
+            </tr>
+          </thead>
+          <tbody id="dinaresTableBody">
+            <tr class="empty-row">
+              <td colspan="8">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-dinares-estadisticas">
+      <div class="stats-grid" id="dinaresStatsGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <section class="content-section" id="section-dinares-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargará un archivo de Excel con todas las personas del listado de dinares, incluyendo si han validado su información con el bot.</p>
+        <button class="btn btn-download" id="btnDinaresDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="dinaresDownloadInfo"></p>
+      </div>
+    </section>
+
     <!-- ========== CONSULTA SECTION ========== -->
 
     <section class="content-section" id="section-consulta-buscar">
@@ -1369,6 +1454,74 @@
           <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeMicrolingotesDeleteModal()">Cancelar</button>
             <button class="btn btn-danger" onclick="executeMicrolingotesDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== DINARES MODALS ========== -->
+
+    <div class="modal-overlay" id="dinaresModalOverlay" style="display:none" onclick="closeDinaresModal(event)">
+      <div class="modal" id="dinaresModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">inventory_2</span>
+          <span class="modal-title" id="dinaresModalTitle">Añadir persona</span>
+          <span class="material-icons modal-close" onclick="closeDinaresModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="dinaresEditId" value="">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Telegram @username</label>
+              <input type="text" id="dinarFormUsername" class="form-input" placeholder="@usuario">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="dinarFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Documento de Identidad</label>
+              <input type="text" id="dinarFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">País</label>
+              <input type="text" id="dinarFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cajas Dinares</label>
+              <input type="number" id="dinarFormCantidad" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Material</label>
+              <input type="text" id="dinarFormMaterial" class="form-input" placeholder="CAJAS DINARES IRAKIES ROJOS X 40.000 NOTAS">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeDinaresModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnDinaresModalSubmit" onclick="submitDinaresForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="dinaresDeleteOverlay" style="display:none" onclick="closeDinaresDeleteModal(event)">
+      <div class="modal modal-sm" id="dinaresDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar persona</span>
+          <span class="material-icons modal-close" onclick="closeDinaresDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">¿Seguro de eliminar?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acción no se puede deshacer. La validación asociada también se eliminará.</p>
+          <input type="hidden" id="dinaresDeleteId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeDinaresDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeDinaresDelete()">Eliminar</button>
           </div>
         </div>
       </div>
