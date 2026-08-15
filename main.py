@@ -2031,6 +2031,34 @@ async def set_lider_flag(data: dict = Body(...)):
     return {"success": True, "lider": lider}
 
 
+@app.post("/api/lider/usuario/add")
+async def add_lider_usuario(data: dict = Body(...)):
+    nombre = (data.get("nombre_completo") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+    username = _lider_norm_user(data.get("telegram_username")) or None
+    documento = (data.get("documento") or "").strip() or None
+    pais = (data.get("pais") or "").strip() or None
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "telegram_username": username,
+        "nombre_completo": nombre,
+        "documento": documento,
+        "pais": pais,
+        "cantidad_1": 0,
+        "material_1": None,
+        "cantidad_2": 0,
+        "material_2": None,
+        "origen": "REGALADO",
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = supabase_inventario.table(LIDER_TABLE).insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear el usuario")
+    return {"success": True, "data": result.data[0]}
+
+
 def _lider_person_rows(rows, nombre="", documento="", username=""):
     """Devuelve TODAS las entradas de una identidad (nombre, documento).
     Si no hay nombre ni documento, se localiza por username."""

@@ -989,7 +989,7 @@
     <section class="content-section" id="section-lider-registros">
       <div class="info-banner">
         <span class="material-icons">info</span>
-        <p>Personas del listado del Canal con sus Membresias y Pergaminos, el desglose por origen (regalado / sorteo / comprado) y el LIDER elegido. Haz clic en una fila para ver sus entradas individuales.</p>
+        <p>Usuarios del Canal con sus Membresias y Pergaminos, el desglose por origen (regalado / sorteo / comprado) y el LIDER elegido. Crea un usuario con sus datos personales y a&ntilde;ade entradas de producto a ese usuario. Haz clic en una fila para ver sus entradas.</p>
       </div>
       <div class="table-controls">
         <div class="search-wrapper">
@@ -1003,8 +1003,8 @@
           <option value="NA">N/A</option>
         </select>
         <button class="btn btn-add" id="btnLiderAdd">
-          <span class="material-icons">add</span>
-          A&ntilde;adir
+          <span class="material-icons">person_add</span>
+          A&ntilde;adir usuario
         </button>
         <span class="table-count" id="liderTableCount">0 registros</span>
       </div>
@@ -1066,28 +1066,11 @@
         </div>
         <div class="modal-body">
           <input type="hidden" id="liderEditId" value="">
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Usuario Telegram @ <span class="form-label-hint">(opcional si hay nombre)</span></label>
-              <input type="text" id="liderFormUsername" class="form-input" placeholder="@usuario">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Nombres y Apellidos</label>
-              <input type="text" id="liderFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">C&eacute;dula / DNI</label>
-              <input type="text" id="liderFormDocumento" class="form-input" placeholder="Ej: 12345678">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Pa&iacute;s</label>
-              <input type="text" id="liderFormPais" class="form-input" placeholder="Ej: COLOMBIA">
-            </div>
-          </div>
+          <input type="hidden" id="liderFormUsername" value="">
+          <input type="hidden" id="liderFormNombre" value="">
+          <input type="hidden" id="liderFormDocumento" value="">
+          <input type="hidden" id="liderFormPais" value="">
+          <p style="font-size:13px;color:#9E9E9E;margin-bottom:12px;display:none" id="liderEntryForLabel"></p>
 
           <div class="form-divider">MEMBRESIA</div>
           <div class="form-row">
@@ -1133,6 +1116,46 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="liderUsuarioModalOverlay" style="display:none" onclick="closeLiderUsuarioModal(event)">
+      <div class="modal" id="liderUsuarioModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">person_add</span>
+          <span class="modal-title">A&ntilde;adir usuario</span>
+          <span class="material-icons modal-close" onclick="closeLiderUsuarioModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos <span style="color:#ef5350">*</span></label>
+              <input type="text" id="liderUsuarioFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Usuario Telegram @ <span class="form-label-hint">(recomendado)</span></label>
+              <input type="text" id="liderUsuarioFormUsername" class="form-input" placeholder="@usuario">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">C&eacute;dula / DNI</label>
+              <input type="text" id="liderUsuarioFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pa&iacute;s</label>
+              <input type="text" id="liderUsuarioFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+
+          <p style="font-size:12px;color:#9E9E9E;margin-top:12px">El usuario se crea sin productos. Despu&eacute;s a&ntilde;ade entradas de producto desde su detalle.</p>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" onclick="closeLiderUsuarioModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitLiderUsuarioForm()">Crear usuario</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-overlay" id="liderDeleteOverlay" style="display:none" onclick="closeLiderDeleteModal(event)">
       <div class="modal modal-sm" id="liderDeleteModal" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -1156,7 +1179,7 @@
       <div class="modal" id="liderPersonaEditModal" onclick="event.stopPropagation()">
         <div class="modal-header">
           <span class="material-icons modal-header-icon">manage_accounts</span>
-          <span class="modal-title">Editar persona</span>
+          <span class="modal-title">Editar usuario</span>
           <span class="material-icons modal-close" onclick="closeLiderPersonaEditModal()">close</span>
         </div>
         <div class="modal-body">
@@ -1164,7 +1187,7 @@
           <input type="hidden" id="liderPersonaEditDocOrig" value="">
           <input type="hidden" id="liderPersonaEditUserOrig" value="">
           <p style="font-size:13px;color:#9E9E9E;margin-bottom:14px" id="liderPersonaEditHint">
-            Se actualizar&aacute;n las entradas de esta persona.
+            Se actualizar&aacute;n las entradas de este usuario.
           </p>
 
           <div class="form-row">
@@ -1201,7 +1224,7 @@
       <div class="modal modal-sm" id="liderPersonaDeleteModal" onclick="event.stopPropagation()">
         <div class="modal-header">
           <span class="material-icons modal-header-icon" style="color:#ef5350">person_remove</span>
-          <span class="modal-title">Eliminar persona</span>
+          <span class="modal-title">Eliminar usuario</span>
           <span class="material-icons modal-close" onclick="closeLiderPersonaDeleteModal()">close</span>
         </div>
         <div class="modal-body">

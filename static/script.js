@@ -4382,7 +4382,7 @@ function initLiderSearch() {
   const liderFilter = document.getElementById("liderLiderFilter");
   if (liderFilter) liderFilter.addEventListener("change", renderLiderTable);
   const btnAdd = document.getElementById("btnLiderAdd");
-  if (btnAdd) btnAdd.addEventListener("click", function() { openLiderAddModal(); });
+  if (btnAdd) btnAdd.addEventListener("click", function() { openLiderUsuarioModal(); });
 }
 
 function initLiderDownload() {
@@ -4598,8 +4598,8 @@ function liderDetailHtml(r) {
     '</div>' +
     '<div class="inventario-detail-actions">' +
       '<button class="btn btn-sm btn-edit" onclick="openLiderAddModal()"><span class="material-icons" style="font-size:16px">add</span> A&ntilde;adir entrada</button>' +
-      '<button class="btn btn-sm btn-edit" onclick="openLiderPersonaEditModal()"><span class="material-icons" style="font-size:16px">manage_accounts</span> Editar persona</button>' +
-      '<button class="btn btn-sm btn-delete" onclick="openLiderPersonaDeleteModal()"><span class="material-icons" style="font-size:16px">person_remove</span> Eliminar persona</button>' +
+      '<button class="btn btn-sm btn-edit" onclick="openLiderPersonaEditModal()"><span class="material-icons" style="font-size:16px">manage_accounts</span> Editar usuario</button>' +
+      '<button class="btn btn-sm btn-delete" onclick="openLiderPersonaDeleteModal()"><span class="material-icons" style="font-size:16px">person_remove</span> Eliminar usuario</button>' +
     '</div>' +
   '</div>';
 }
@@ -4649,6 +4649,7 @@ function renderLiderTable() {
     html += '</tr>';
 
     if (isExpanded) {
+      liderCurrentPerson = r;
       html += '<tr class="ayudas-detail-row"><td colspan="8">' + liderDetailHtml(r) + '</td></tr>';
     }
   }
@@ -4703,12 +4704,22 @@ function findLiderEntryById(id) {
 }
 
 function openLiderAddModal() {
+  const p = liderCurrentPerson;
+  if (!p) {
+    alert("Abre primero el detalle de un usuario para a\u00f1adirle una entrada.");
+    return;
+  }
   document.getElementById("liderEditId").value = "";
   document.getElementById("liderModalTitle").textContent = "A&ntilde;adir entrada";
-  document.getElementById("liderFormUsername").value = "";
-  document.getElementById("liderFormNombre").value = "";
-  document.getElementById("liderFormDocumento").value = "";
-  document.getElementById("liderFormPais").value = "";
+  document.getElementById("liderFormUsername").value = p.telegram_username || "";
+  document.getElementById("liderFormNombre").value = p.nombre_completo || "";
+  document.getElementById("liderFormDocumento").value = p.documento || "";
+  document.getElementById("liderFormPais").value = p.pais || "";
+  const label = document.getElementById("liderEntryForLabel");
+  if (label) {
+    label.style.display = "";
+    label.textContent = "Para: " + (p.nombre_completo || "—") + " (solo datos de producto)";
+  }
   document.getElementById("liderFormCant1").value = "0";
   document.getElementById("liderFormMat1").value = "MEMBRESIA DE 100 BI";
   document.getElementById("liderFormCant2").value = "0";
@@ -4723,10 +4734,8 @@ function openLiderEditModal(id) {
   if (!entry) return;
   document.getElementById("liderEditId").value = id;
   document.getElementById("liderModalTitle").textContent = "Editar entrada";
-  document.getElementById("liderFormUsername").value = entry.telegram_username || "";
-  document.getElementById("liderFormNombre").value = entry.nombre_completo || "";
-  document.getElementById("liderFormDocumento").value = entry.documento || "";
-  document.getElementById("liderFormPais").value = entry.pais || "";
+  const label = document.getElementById("liderEntryForLabel");
+  if (label) label.style.display = "none";
   document.getElementById("liderFormCant1").value = entry.cantidad_1 || 0;
   document.getElementById("liderFormMat1").value = entry.material_1 || "";
   document.getElementById("liderFormCant2").value = entry.cantidad_2 || 0;
@@ -4745,16 +4754,18 @@ function closeLiderModal(e) {
 async function submitLiderForm() {
   const id = document.getElementById("liderEditId").value;
   const body = {
-    telegram_username: document.getElementById("liderFormUsername").value.trim().replace(/^@/, ""),
-    nombre_completo: document.getElementById("liderFormNombre").value.trim(),
-    documento: document.getElementById("liderFormDocumento").value.trim(),
-    pais: document.getElementById("liderFormPais").value.trim(),
     cantidad_1: document.getElementById("liderFormCant1").value,
     material_1: document.getElementById("liderFormMat1").value.trim(),
     cantidad_2: document.getElementById("liderFormCant2").value,
     material_2: document.getElementById("liderFormMat2").value.trim(),
     origen: document.getElementById("liderFormOrigen").value,
   };
+  if (!id) {
+    body.telegram_username = document.getElementById("liderFormUsername").value.trim().replace(/^@/, "");
+    body.nombre_completo = document.getElementById("liderFormNombre").value.trim();
+    body.documento = document.getElementById("liderFormDocumento").value.trim();
+    body.pais = document.getElementById("liderFormPais").value.trim();
+  }
   try {
     const url = id ? "/api/lider/entradas/edit/" + id : "/api/lider/entradas/add";
     const resp = await fetch(url, {
@@ -4771,6 +4782,47 @@ async function submitLiderForm() {
     await loadLiderRegistros();
   } catch (err) {
     alert(err.message || "Error al guardar.");
+  }
+}
+
+// ========== LIDER CRUD (usuario) ==========
+
+function openLiderUsuarioModal() {
+  document.getElementById("liderUsuarioFormNombre").value = "";
+  document.getElementById("liderUsuarioFormUsername").value = "";
+  document.getElementById("liderUsuarioFormDocumento").value = "";
+  document.getElementById("liderUsuarioFormPais").value = "";
+  document.getElementById("liderUsuarioModalOverlay").style.display = "flex";
+}
+
+function closeLiderUsuarioModal(e) {
+  const overlay = document.getElementById("liderUsuarioModalOverlay");
+  if (e && e.target !== overlay) return;
+  overlay.style.display = "none";
+}
+
+async function submitLiderUsuarioForm() {
+  const body = {
+    nombre_completo: document.getElementById("liderUsuarioFormNombre").value.trim(),
+    telegram_username: document.getElementById("liderUsuarioFormUsername").value.trim().replace(/^@/, ""),
+    documento: document.getElementById("liderUsuarioFormDocumento").value.trim(),
+    pais: document.getElementById("liderUsuarioFormPais").value.trim(),
+  };
+  try {
+    const resp = await fetch("/api/lider/usuario/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al crear el usuario");
+    }
+    closeLiderUsuarioModal();
+    liderEntriesCache = {};
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al crear el usuario.");
   }
 }
 
