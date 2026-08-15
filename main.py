@@ -5,6 +5,7 @@ import re
 import secrets
 import time
 import difflib
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -1682,6 +1683,24 @@ def _lider_norm_user(value):
     return s.strip().lower()
 
 
+def _lider_norm_name(value) -> str:
+    if value is None:
+        return ""
+    s = unicodedata.normalize("NFD", str(value).upper())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _lider_norm_doc(value) -> str:
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    s = s.upper().lstrip("0")
+    return s or "0"
+
+
 def _lider_to_int(v):
     if v is None or str(v).strip() == "":
         return 0
@@ -1704,7 +1723,12 @@ def _lider_flags_map():
 def _lider_attach_flags(persons):
     flags = _lider_flags_map()
     for p in persons:
-        f = flags.get((p.get("telegram_username") or "").strip().lower())
+        f = None
+        for u in p.get("telegram_usernames") or [p.get("telegram_username")]:
+            cand = flags.get((u or "").strip().lower())
+            if cand:
+                f = cand
+                break
         p["lider"] = (f or {}).get("lider")
         p["lider_telegram_user_id"] = (f or {}).get("telegram_user_id")
         p["lider_updated_at"] = (f or {}).get("updated_at")
@@ -1712,13 +1736,23 @@ def _lider_attach_flags(persons):
 
 
 def _lider_persons(rows):
+    """Agrupa por (nombre normalizado, documento normalizado) => identidad.
+    Personas distintas que comparten un telefono/username quedan separadas
+    y cada una conserva sus propios totales, origenes, etc."""
     persons = {}
     for r in rows:
+        name = _lider_norm_name(r.get("nombre_completo"))
+        doc = _lider_norm_doc(r.get("documento"))
         u = (r.get("telegram_username") or "").strip().lower()
-        if not u:
-            continue
-        p = persons.setdefault(u, {
-            "telegram_username": r.get("telegram_username"),
+        if not name and not doc:
+            if not u:
+                continue
+            key = ("", u)
+        else:
+            key = (name, doc)
+        p = persons.setdefault(key, {
+            "telegram_username": None,
+            "telegram_usernames": [],
             "nombre_completo": None,
             "documento": None,
             "pais": None,
@@ -1735,6 +1769,10 @@ def _lider_persons(rows):
         p["nombre_completo"] = p["nombre_completo"] or r.get("nombre_completo")
         p["documento"] = p["documento"] or r.get("documento")
         p["pais"] = p["pais"] or r.get("pais")
+        if u and u not in p["telegram_usernames"]:
+            p["telegram_usernames"].append(u)
+            if p["telegram_username"] is None:
+                p["telegram_username"] = r.get("telegram_username")
         c_created = r.get("created_at")
         c_updated = r.get("updated_at")
         if c_created and (not p["created_at"] or c_created < p["created_at"]):
@@ -1762,6 +1800,24 @@ def _lider_persons(rows):
     return _lider_attach_flags(out)
 
 
+def _lider_filter_entries(rows, nombre="", documento=""):
+    """Devuelve las entradas que pertenecen a la identidad (nombre, documento)."""
+    if not nombre and not documento:
+        return rows
+    want_name = _lider_norm_name(nombre) if nombre else None
+    want_doc = _lider_norm_doc(documento) if documento else None
+    filtered = []
+    for r in rows:
+        n = _lider_norm_name(r.get("nombre_completo"))
+        d = _lider_norm_doc(r.get("documento"))
+        if want_name is not None and n != want_name:
+            continue
+        if want_doc is not None and d != want_doc:
+            continue
+        filtered.append(r)
+    return filtered
+
+
 @app.get("/api/lider/data")
 async def get_lider_data():
     result = supabase_inventario.table(LIDER_TABLE).select("*").order("id", desc=True).execute()
@@ -1771,12 +1827,14 @@ async def get_lider_data():
 
 
 @app.get("/api/lider/entradas")
-async def get_lider_entradas(username: str = ""):
+async def get_lider_entradas(username: str = "", nombre: str = "", documento: str = ""):
     q = supabase_inventario.table(LIDER_TABLE).select("*").order("id", desc=True)
     if username:
         q = q.eq("telegram_username", _lider_norm_user(username))
     result = q.execute()
     rows = result.data or []
+    if nombre or documento:
+        rows = _lider_filter_entries(rows, nombre, documento)
     return {"data": rows, "total": len(rows)}
 
 

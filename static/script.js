@@ -4371,6 +4371,10 @@ let liderAllData = [];
 let liderExpandedFilterIdx = null;
 let liderEntriesCache = {};
 
+function liderPersonKey(p) {
+  return (p.nombre_completo || "") + "|" + (p.documento || "");
+}
+
 function initLiderSearch() {
   const searchInput = document.getElementById("liderSearchInput");
   if (searchInput) searchInput.addEventListener("input", renderLiderTable);
@@ -4512,12 +4516,16 @@ async function toggleLiderDetail(filterIdx) {
       else if (ok && f === "NA") ok = !r.lider;
       return ok;
     })[filterIdx];
-    if (p && p.telegram_username && !liderEntriesCache[p.telegram_username]) {
+    const pkey = p ? liderPersonKey(p) : null;
+    if (p && pkey && !liderEntriesCache[pkey]) {
       try {
-        const resp = await fetch("/api/lider/entradas?username=" + encodeURIComponent(p.telegram_username));
+        const params = new URLSearchParams();
+        if (p.nombre_completo) params.set("nombre", p.nombre_completo);
+        if (p.documento) params.set("documento", p.documento);
+        const resp = await fetch("/api/lider/entradas?" + params.toString());
         if (resp.ok) {
           const json = await resp.json();
-          liderEntriesCache[p.telegram_username] = json.data || [];
+          liderEntriesCache[pkey] = json.data || [];
         }
       } catch (e) {}
     }
@@ -4532,7 +4540,7 @@ function liderDetailHtml(r) {
   };
   const flag = getCountryFlag(r.pais);
   const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
-  const entries = (r.telegram_username && liderEntriesCache[r.telegram_username]) || [];
+  const entries = liderEntriesCache[liderPersonKey(r)] || [];
 
   let entriesHtml = "";
   if (entries.length === 0) {
@@ -4681,7 +4689,7 @@ async function loadLiderStats() {
 
 function findLiderEntryById(id) {
   for (const p of liderAllData) {
-    const entries = (p.telegram_username && liderEntriesCache[p.telegram_username]) || [];
+    const entries = liderEntriesCache[liderPersonKey(p)] || [];
     const found = entries.find(function(e) { return e.id === id; });
     if (found) return found;
   }
