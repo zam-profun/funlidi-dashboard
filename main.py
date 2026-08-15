@@ -2031,6 +2031,113 @@ async def set_lider_flag(data: dict = Body(...)):
     return {"success": True, "lider": lider}
 
 
+def _lider_person_rows(rows, nombre="", documento="", username=""):
+    """Devuelve TODAS las entradas de una identidad (nombre, documento).
+    Si no hay nombre ni documento, se localiza por username."""
+    if nombre or documento:
+        return _lider_filter_entries(rows, nombre, documento)
+    if username:
+        u = _lider_norm_user(username)
+        return [r for r in rows if _lider_norm_user(r.get("telegram_username")) == u]
+    return []
+
+
+def _lider_flag_cleanup_for_usernames(usernames, remaining_ids):
+    """Elimina la flag de lider_validaciones de cada username que ya no
+    aparece en NINGUNA entrada (protege usernames compartidos)."""
+    for u in usernames:
+        if not u:
+            continue
+        used = (
+            supabase_inventario.table(LIDER_TABLE)
+            .select("id")
+            .eq("telegram_username", u)
+            .execute()
+            .data
+            or []
+        )
+        still_used = any(r.get("id") not in remaining_ids for r in used)
+        if not still_used:
+            supabase_inventario.table(LIDER_FLAG_TABLE).delete().eq("telegram_username", u).execute()
+
+
+@app.put("/api/lider/persona/edit")
+async def edit_lider_persona(data: dict = Body(...)):
+    nombre = data.get("nombre") or ""
+    documento = data.get("documento") or ""
+    username = data.get("telegram_username") or ""
+
+    new_nombre = (data.get("new_nombre") or "").strip() or None
+    new_documento = (data.get("new_documento") or "").strip() or None
+    new_pais = (data.get("new_pais") or "").strip() or None
+    new_username = _lider_norm_user(data.get("new_telegram_username")) or None
+
+    if not new_nombre and not new_documento:
+        raise HTTPException(status_code=400, detail="El nombre o el documento es obligatorio")
+
+    result = supabase_inventario.table(LIDER_TABLE).select("*").execute()
+    rows = result.data or []
+    targets = _lider_person_rows(rows, nombre, documento, username)
+    if not targets:
+        raise HTTPException(status_code=404, detail="Persona no encontrada")
+
+    ids = [r["id"] for r in targets]
+    old_usernames = sorted({_lider_norm_user(r.get("telegram_username")) for r in targets if r.get("telegram_username")})
+
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if new_nombre is not None:
+        update["nombre_completo"] = new_nombre
+    if new_documento is not None:
+        update["documento"] = new_documento
+    if new_pais is not None:
+        update["pais"] = new_pais
+    if new_username is not None:
+        update["telegram_username"] = new_username
+
+    supabase_inventario.table(LIDER_TABLE).update(update).in_("id", ids).execute()
+
+    # Migracion de la flag si cambio el username
+    if new_username is not None and new_username not in old_usernames:
+        flag_to_move = None
+        for old in old_usernames:
+            f = supabase_inventario.table(LIDER_FLAG_TABLE).select("*").eq("telegram_username", old).execute().data or []
+            if f:
+                flag_to_move = f[0]
+                break
+        _lider_flag_cleanup_for_usernames(old_usernames, set(ids))
+        if flag_to_move is not None:
+            now = datetime.now(timezone.utc).isoformat()
+            supabase_inventario.table(LIDER_FLAG_TABLE).upsert({
+                "telegram_username": new_username,
+                "telegram_user_id": flag_to_move.get("telegram_user_id"),
+                "lider": flag_to_move.get("lider"),
+                "updated_at": now,
+            }, on_conflict="telegram_username").execute()
+
+    return {"success": True, "updated": len(ids)}
+
+
+@app.delete("/api/lider/persona/delete")
+async def delete_lider_persona(data: dict = Body(...)):
+    nombre = data.get("nombre") or ""
+    documento = data.get("documento") or ""
+    username = data.get("telegram_username") or ""
+
+    result = supabase_inventario.table(LIDER_TABLE).select("*").execute()
+    rows = result.data or []
+    targets = _lider_person_rows(rows, nombre, documento, username)
+    if not targets:
+        raise HTTPException(status_code=404, detail="Persona no encontrada")
+
+    ids = [r["id"] for r in targets]
+    usernames = sorted({_lider_norm_user(r.get("telegram_username")) for r in targets if r.get("telegram_username")})
+
+    supabase_inventario.table(LIDER_TABLE).delete().in_("id", ids).execute()
+    _lider_flag_cleanup_for_usernames(usernames, set(ids))
+
+    return {"success": True, "deleted": len(ids)}
+
+
 # ========== REPARTICION VAQUITA ENDPOINTS ==========
 
 REPARTICION_TABLE = "reparticion_vaquita"

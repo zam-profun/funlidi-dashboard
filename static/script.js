@@ -4370,6 +4370,7 @@ function buildVerificacionCard(p) {
 let liderAllData = [];
 let liderExpandedFilterIdx = null;
 let liderEntriesCache = {};
+let liderCurrentPerson = null;
 
 function liderPersonKey(p) {
   return (p.nombre_completo || "") + "|" + (p.documento || "");
@@ -4501,8 +4502,10 @@ function liderBracketPer(r) {
 
 async function toggleLiderDetail(filterIdx) {
   liderExpandedFilterIdx = liderExpandedFilterIdx === filterIdx ? null : filterIdx;
-  if (liderExpandedFilterIdx !== null) {
-    const p = liderAllData.filter(function(r) {
+  if (liderExpandedFilterIdx === null) {
+    liderCurrentPerson = null;
+  } else {
+    liderCurrentPerson = liderAllData.filter(function(r) {
       const s = document.getElementById("liderSearchInput") ? document.getElementById("liderSearchInput").value.toLowerCase() : "";
       const f = document.getElementById("liderLiderFilter") ? document.getElementById("liderLiderFilter").value : "";
       let ok = true;
@@ -4516,6 +4519,7 @@ async function toggleLiderDetail(filterIdx) {
       else if (ok && f === "NA") ok = !r.lider;
       return ok;
     })[filterIdx];
+    const p = liderCurrentPerson;
     const pkey = p ? liderPersonKey(p) : null;
     if (p && pkey && !liderEntriesCache[pkey]) {
       try {
@@ -4594,6 +4598,8 @@ function liderDetailHtml(r) {
     '</div>' +
     '<div class="inventario-detail-actions">' +
       '<button class="btn btn-sm btn-edit" onclick="openLiderAddModal()"><span class="material-icons" style="font-size:16px">add</span> A&ntilde;adir entrada</button>' +
+      '<button class="btn btn-sm btn-edit" onclick="openLiderPersonaEditModal()"><span class="material-icons" style="font-size:16px">manage_accounts</span> Editar persona</button>' +
+      '<button class="btn btn-sm btn-delete" onclick="openLiderPersonaDeleteModal()"><span class="material-icons" style="font-size:16px">person_remove</span> Eliminar persona</button>' +
     '</div>' +
   '</div>';
 }
@@ -4789,6 +4795,103 @@ async function executeLiderDelete() {
     }
     closeLiderDeleteModal();
     liderEntriesCache = {};
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al eliminar.");
+  }
+}
+
+// ========== LIDER CRUD (persona) ==========
+
+function openLiderPersonaEditModal() {
+  const p = liderCurrentPerson;
+  if (!p) return;
+  document.getElementById("liderPersonaEditNombreOrig").value = p.nombre_completo || "";
+  document.getElementById("liderPersonaEditDocOrig").value = p.documento || "";
+  document.getElementById("liderPersonaEditUserOrig").value = p.telegram_username || "";
+  document.getElementById("liderPersonaFormUsername").value = p.telegram_username || "";
+  document.getElementById("liderPersonaFormNombre").value = p.nombre_completo || "";
+  document.getElementById("liderPersonaFormDocumento").value = p.documento || "";
+  document.getElementById("liderPersonaFormPais").value = p.pais || "";
+  const n = p.num_entradas || 0;
+  document.getElementById("liderPersonaEditHint").textContent =
+    "Se actualizar\u00e1n " + n + " entrada" + (n !== 1 ? "s" : "") + " de esta persona.";
+  document.getElementById("liderPersonaEditOverlay").style.display = "flex";
+}
+
+function closeLiderPersonaEditModal(e) {
+  const overlay = document.getElementById("liderPersonaEditOverlay");
+  if (e && e.target !== overlay) return;
+  overlay.style.display = "none";
+}
+
+async function submitLiderPersonaForm() {
+  const body = {
+    nombre: document.getElementById("liderPersonaEditNombreOrig").value,
+    documento: document.getElementById("liderPersonaEditDocOrig").value,
+    telegram_username: document.getElementById("liderPersonaEditUserOrig").value,
+    new_nombre: document.getElementById("liderPersonaFormNombre").value.trim(),
+    new_documento: document.getElementById("liderPersonaFormDocumento").value.trim(),
+    new_pais: document.getElementById("liderPersonaFormPais").value.trim(),
+    new_telegram_username: document.getElementById("liderPersonaFormUsername").value.trim().replace(/^@/, ""),
+  };
+  try {
+    const resp = await fetch("/api/lider/persona/edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al guardar");
+    }
+    closeLiderPersonaEditModal();
+    liderEntriesCache = {};
+    await loadLiderRegistros();
+  } catch (err) {
+    alert(err.message || "Error al guardar.");
+  }
+}
+
+function openLiderPersonaDeleteModal() {
+  const p = liderCurrentPerson;
+  if (!p) return;
+  document.getElementById("liderPersonaDeleteNombre").value = p.nombre_completo || "";
+  document.getElementById("liderPersonaDeleteDoc").value = p.documento || "";
+  document.getElementById("liderPersonaDeleteUser").value = p.telegram_username || "";
+  document.getElementById("liderPersonaDeleteName").textContent =
+    (p.nombre_completo || "Sin nombre") + "  ·  " + (p.documento || "sin documento");
+  document.getElementById("liderPersonaDeleteImpact").textContent =
+    "Se eliminar\u00e1n " + (p.num_entradas || 0) + " entrada" + ((p.num_entradas || 0) !== 1 ? "s" : "") +
+    " · " + (p.total_membresias || 0) + " membres\u00edas · " + (p.total_pergaminos || 0) + " pergaminos. Esta acci\u00f3n no se puede deshacer.";
+  document.getElementById("liderPersonaDeleteOverlay").style.display = "flex";
+}
+
+function closeLiderPersonaDeleteModal(e) {
+  const overlay = document.getElementById("liderPersonaDeleteOverlay");
+  if (e && e.target !== overlay) return;
+  overlay.style.display = "none";
+}
+
+async function executeLiderPersonaDelete() {
+  const body = {
+    nombre: document.getElementById("liderPersonaDeleteNombre").value,
+    documento: document.getElementById("liderPersonaDeleteDoc").value,
+    telegram_username: document.getElementById("liderPersonaDeleteUser").value,
+  };
+  try {
+    const resp = await fetch("/api/lider/persona/delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.detail || "Error al eliminar");
+    }
+    closeLiderPersonaDeleteModal();
+    liderEntriesCache = {};
+    liderCurrentPerson = null;
     await loadLiderRegistros();
   } catch (err) {
     alert(err.message || "Error al eliminar.");

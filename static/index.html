@@ -1152,6 +1152,72 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="liderPersonaEditOverlay" style="display:none" onclick="closeLiderPersonaEditModal(event)">
+      <div class="modal" id="liderPersonaEditModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">manage_accounts</span>
+          <span class="modal-title">Editar persona</span>
+          <span class="material-icons modal-close" onclick="closeLiderPersonaEditModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="liderPersonaEditNombreOrig" value="">
+          <input type="hidden" id="liderPersonaEditDocOrig" value="">
+          <input type="hidden" id="liderPersonaEditUserOrig" value="">
+          <p style="font-size:13px;color:#9E9E9E;margin-bottom:14px" id="liderPersonaEditHint">
+            Se actualizar&aacute;n las entradas de esta persona.
+          </p>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Usuario Telegram @</label>
+              <input type="text" id="liderPersonaFormUsername" class="form-input" placeholder="@usuario">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="liderPersonaFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">C&eacute;dula / DNI</label>
+              <input type="text" id="liderPersonaFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pa&iacute;s</label>
+              <input type="text" id="liderPersonaFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn btn-secondary" onclick="closeLiderPersonaEditModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitLiderPersonaForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="liderPersonaDeleteOverlay" style="display:none" onclick="closeLiderPersonaDeleteModal(event)">
+      <div class="modal modal-sm" id="liderPersonaDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">person_remove</span>
+          <span class="modal-title">Eliminar persona</span>
+          <span class="material-icons modal-close" onclick="closeLiderPersonaDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="liderPersonaDeleteNombre" value="">
+          <input type="hidden" id="liderPersonaDeleteDoc" value="">
+          <input type="hidden" id="liderPersonaDeleteUser" value="">
+          <p style="text-align:center;font-size:15px;margin:12px 0" id="liderPersonaDeleteName"></p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px" id="liderPersonaDeleteImpact"></p>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeLiderPersonaDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeLiderPersonaDelete()">Eliminar todo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ========== CONSULTA SECTION ========== -->
 
     <section class="content-section" id="section-consulta-buscar">
