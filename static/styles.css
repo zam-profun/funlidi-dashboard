@@ -118,6 +118,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-contenedores {
+  --clr-primary: #F06292;
+  --clr-primary-rgb: 240, 98, 146;
+  --clr-primary-hover: #EC407A;
+  --clr-primary-dark: #D81B60;
+  --clr-bg-light: #FCE4EC;
+  --clr-bg-hover: #F8BBD0;
+  --clr-border: #F8BBD0;
+  --clr-header-border: #F8BBD0;
+  --clr-warning: #F57F17;
+}
+
 * {
   margin: 0;
   padding: 0;

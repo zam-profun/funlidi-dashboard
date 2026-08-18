@@ -70,6 +70,8 @@ function initializeApp() {
   initMicrolingotesDownload();
   initDinaresSearch();
   initDinaresDownload();
+  initContenedoresSearch();
+  initContenedoresDownload();
   initConsultaSearch();
   initTimezone();
   initFarleySearch();
@@ -118,6 +120,7 @@ function switchModule(module) {
   document.getElementById("nav-lider").style.display = module === "lider" ? "" : "none";
   document.getElementById("nav-microlingotes").style.display = module === "microlingotes" ? "" : "none";
   document.getElementById("nav-dinares").style.display = module === "dinares" ? "" : "none";
+  document.getElementById("nav-contenedores").style.display = module === "contenedores" ? "" : "none";
   document.getElementById("nav-consulta").style.display = module === "consulta" ? "" : "none";
   document.getElementById("nav-farley").style.display = module === "farley" ? "" : "none";
   document.getElementById("nav-verificacion").style.display = module === "verificacion" ? "" : "none";
@@ -131,6 +134,7 @@ function switchModule(module) {
   document.body.classList.toggle("theme-lider", module === "lider");
   document.body.classList.toggle("theme-microlingotes", module === "microlingotes");
   document.body.classList.toggle("theme-dinares", module === "dinares");
+  document.body.classList.toggle("theme-contenedores", module === "contenedores");
   document.body.classList.toggle("theme-farley", module === "farley");
   document.body.classList.toggle("theme-verificacion", module === "verificacion");
   document.body.classList.toggle("theme-reparticion", module === "reparticion");
@@ -177,6 +181,9 @@ function switchSection(section) {
     "dinares-registros": "Registros - Dinares",
     "dinares-estadisticas": "Estadisticas - Dinares",
     "dinares-descargar": "Descargar - Dinares",
+    "contenedores-registros": "Registros - Contenedores",
+    "contenedores-estadisticas": "Estadisticas - Contenedores",
+    "contenedores-descargar": "Descargar - Contenedores",
     "consulta-buscar": "Consulta General",
     "farley-resumen": "Resumen - B. DATOS FARLEY",
     "farley-miembros": "Miembros - B. DATOS FARLEY",
@@ -214,6 +221,8 @@ function loadSection(section) {
   if (section === "microlingotes-estadisticas") loadMicrolingotesStats();
   if (section === "dinares-registros") loadDinaresRegistros();
   if (section === "dinares-estadisticas") loadDinaresStats();
+  if (section === "contenedores-registros") loadContenedoresRegistros();
+  if (section === "contenedores-estadisticas") loadContenedoresStats();
   if (section === "consulta-buscar") loadConsulta();
   if (section === "farley-resumen") loadFarleyResumen();
   if (section === "farley-miembros") loadFarleyMiembros();
@@ -2704,6 +2713,366 @@ async function executeDinaresDelete() {
     closeDinaresDeleteModal();
     dinaresExpandedRow = null;
     await loadDinaresRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
+  }
+}
+
+
+// ========== CONTENEDORES FUNCTIONS ==========
+
+let contenedoresAllData = [];
+let contenedoresExpandedRow = null;
+
+function initContenedoresSearch() {
+  document.getElementById("contenedoresSearchInput").addEventListener("input", renderContenedoresTable);
+  document.getElementById("contenedoresValidadoFilter").addEventListener("change", renderContenedoresTable);
+  document.getElementById("btnContenedoresAdd").addEventListener("click", openContenedoresAddModal);
+}
+
+function initContenedoresDownload() {
+  document.getElementById("btnContenedoresDownload").addEventListener("click", async () => {
+    const btn = document.getElementById("btnContenedoresDownload");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    try {
+      const resp = await fetch("/api/contenedores/download");
+      if (!resp.ok) throw new Error("Error al descargar");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getContenedoresFilename(resp);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      document.getElementById("contenedoresDownloadInfo").textContent = "Descarga completada.";
+    } catch (err) {
+      document.getElementById("contenedoresDownloadInfo").textContent = "Error al descargar.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">description</span> Descargar XLSX';
+    }
+  });
+}
+
+function getContenedoresFilename(resp) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  const hoy = new Date();
+  return `Contenedores_Validacion_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
+}
+
+async function loadContenedoresRegistros() {
+  const tbody = document.getElementById("contenedoresTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+
+  try {
+    const resp = await fetch("/api/contenedores/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    contenedoresAllData = json.data || [];
+    renderContenedoresTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function contenedoresBadge(validado) {
+  if (validado) return '<span class="estado-badge estado-completo">Validado</span>';
+  return '<span class="estado-badge estado-incompleto">No validado</span>';
+}
+
+function contenedoresToggleHtml(r) {
+  const checked = r.validado ? "checked" : "";
+  const uname = escHtml(r.telegram_username || "");
+  return '<label class="switch" title="Marcar/desmarcar validación">' +
+    '<input type="checkbox" ' + checked + ' onclick="event.stopPropagation();toggleContenedoresValidacion(\'' + uname + '\', this.checked)" data-username="' + uname + '">' +
+    '<span class="slider round"></span></label>';
+}
+
+async function toggleContenedoresValidacion(username, validado) {
+  try {
+    const resp = await fetch("/api/contenedores/set-validacion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ telegram_username: username, validado: validado }),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al actualizar");
+    }
+    await loadContenedoresRegistros();
+  } catch (err) {
+    alert(err.message || "Error al actualizar la validación.");
+    await loadContenedoresRegistros();
+  }
+}
+
+function toggleContenedoresDetail(idx) {
+  contenedoresExpandedRow = contenedoresExpandedRow === idx ? null : idx;
+  renderContenedoresTable();
+}
+
+function buildContenedoresDetailHtml(r) {
+  const f = (v) => (v && String(v).trim() && String(v).trim() !== "VACIO" ? String(v).trim() : "—");
+  const flag = getCountryFlag(r.pais);
+  const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
+  const cantidad = (r.cantidad === null || r.cantidad === undefined) ? "—" : Number(r.cantidad).toLocaleString();
+
+  return `
+    <div class="ayudas-detail-card">
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">person</span> INFORMACION PERSONAL</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">badge</span><span class="ayudas-detail-label">Nombres:</span><span class="ayudas-detail-value">${escHtml(f(r.nombre_completo))}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">assignment_ind</span><span class="ayudas-detail-label">Documento:</span><span class="ayudas-detail-value">${escHtml(f(r.documento))}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">public</span><span class="ayudas-detail-label">Pais:</span><span class="ayudas-detail-value">${flag} ${escHtml(f(r.pais))}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">alternate_email</span><span class="ayudas-detail-label">Telegram:</span><span class="ayudas-detail-value">${escHtml(usuario)}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">inventory_2</span> MATERIAL ADQUIRIDO</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">inventory_2</span><span class="ayudas-detail-label">Cajas:</span><span class="ayudas-detail-value inventario-qty-badge">${cantidad}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">category</span><span class="ayudas-detail-label">Material:</span><span class="ayudas-detail-value">${escHtml(f(r.material))}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section">
+        <div class="ayudas-detail-title"><span class="material-icons">verified</span> VALIDACION EN EL BOT</div>
+        <div class="ayudas-detail-grid">
+          <div class="ayudas-detail-item"><span class="material-icons">check_circle</span><span class="ayudas-detail-label">Estado:</span><span class="ayudas-detail-value">${contenedoresBadge(r.validado)}</span></div>
+          <div class="ayudas-detail-item"><span class="material-icons">schedule</span><span class="ayudas-detail-label">Validado el:</span><span class="ayudas-detail-value">${r.validated_at ? formatDate(r.validated_at) : "—"}</span></div>
+        </div>
+      </div>
+      <div class="ayudas-detail-section ayudas-detail-section-meta">
+        <div class="ayudas-detail-meta-row">
+          <span class="material-icons">schedule</span> Creado: ${formatDate(r.created_at)}
+          <span class="material-icons" style="margin-left:20px">update</span> Actualizado: ${formatDate(r.updated_at)}
+        </div>
+      </div>
+      <div class="inventario-detail-actions">
+        <button class="btn btn-sm btn-edit" onclick="event.stopPropagation();openContenedoresEditModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">edit</span> Editar
+        </button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();openContenedoresDeleteModal(${r.id})">
+          <span class="material-icons" style="font-size:16px">delete</span> Eliminar
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderContenedoresTable() {
+  const tbody = document.getElementById("contenedoresTableBody");
+  const search = document.getElementById("contenedoresSearchInput").value.toLowerCase();
+  const validadoFilter = document.getElementById("contenedoresValidadoFilter").value;
+
+  let filtered = contenedoresAllData;
+  if (search) {
+    filtered = filtered.filter((r) =>
+      [r.nombre_completo, r.documento, r.pais, r.telegram_username]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
+  }
+  if (validadoFilter === "validado") {
+    filtered = filtered.filter((r) => r.validado);
+  } else if (validadoFilter === "novalidado") {
+    filtered = filtered.filter((r) => !r.validado);
+  }
+
+  document.getElementById("contenedoresTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search || validadoFilter
+      ? "No se encontraron registros con esos filtros."
+      : "Aun no hay registros de Contenedores.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const flag = getCountryFlag(r.pais);
+    const usuario = r.telegram_username ? "@" + r.telegram_username : "—";
+    const expandIcon = contenedoresExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = contenedoresExpandedRow === i;
+    const cantidad = (r.cantidad === null || r.cantidad === undefined) ? "—" : Number(r.cantidad).toLocaleString();
+
+    html += '<tr class="ayudas-row" onclick="toggleContenedoresDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td><strong>' + escHtml(r.nombre_completo || "—") + '</strong></td>';
+    html += '<td>' + escHtml(usuario) + '</td>';
+    html += '<td>' + escHtml(r.documento || "—") + '</td>';
+    html += '<td>' + flag + ' ' + escHtml(r.pais || "—") + '</td>';
+    html += '<td style="text-align:right">' + cantidad + '</td>';
+    html += '<td>' + contenedoresToggleHtml(r) + '</td>';
+    html += '<td>' + (r.validated_at ? formatDate(r.validated_at) : "—") + '</td>';
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="8">' + buildContenedoresDetailHtml(r) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+async function loadContenedoresStats() {
+  const el = document.getElementById("contenedoresStatsGrid");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+
+  try {
+    const resp = await fetch("/api/contenedores/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total + '</span><span class="stat-label">Total de personas</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">verified</span><div class="stat-info"><span class="stat-value">' + d.validados + '</span><span class="stat-label">Validados</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">pending</span><div class="stat-info"><span class="stat-value">' + d.novalidados + '</span><span class="stat-label">No validados</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">percent</span><div class="stat-info"><span class="stat-value">' + d.pct_validado + '%</span><span class="stat-label">% Validado</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">inventory_2</span><div class="stat-info"><span class="stat-value">' + Number(d.total_cajas).toLocaleString() + '</span><span class="stat-label">Total cajas</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">public</span><div class="stat-info"><span class="stat-value">' + d.paises + '</span><span class="stat-label">Paises</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value stat-date">' + (d.ultima_validacion ? formatDateStrict(d.ultima_validacion) : "—") + '</span><span class="stat-label">Ultima validacion</span></div></div>';
+
+    updateRefreshIndicator(false);
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}
+
+// ========== CONTENEDORES CRUD ==========
+
+function openContenedoresAddModal() {
+  document.getElementById("contenedoresEditId").value = "";
+  document.getElementById("contenedoresModalTitle").textContent = "Añadir persona";
+  document.getElementById("contenedorFormUsername").value = "";
+  document.getElementById("contenedorFormNombre").value = "";
+  document.getElementById("contenedorFormDocumento").value = "";
+  document.getElementById("contenedorFormPais").value = "";
+  document.getElementById("contenedorFormCantidad").value = "";
+  document.getElementById("contenedorFormMaterial").value = "";
+  document.getElementById("btnContenedoresModalSubmit").textContent = "Guardar";
+  document.getElementById("contenedoresModalOverlay").style.display = "flex";
+}
+
+function openContenedoresEditModal(id) {
+  const r = contenedoresAllData.find(function (item) { return item.id === id; });
+  if (!r) return;
+
+  document.getElementById("contenedoresEditId").value = id;
+  document.getElementById("contenedoresModalTitle").textContent = "Editar persona";
+  document.getElementById("contenedorFormUsername").value = r.telegram_username || "";
+  document.getElementById("contenedorFormNombre").value = r.nombre_completo || "";
+  document.getElementById("contenedorFormDocumento").value = r.documento || "";
+  document.getElementById("contenedorFormPais").value = r.pais || "";
+  document.getElementById("contenedorFormCantidad").value = r.cantidad || "";
+  document.getElementById("contenedorFormMaterial").value = r.material || "";
+  document.getElementById("btnContenedoresModalSubmit").textContent = "Actualizar";
+  document.getElementById("contenedoresModalOverlay").style.display = "flex";
+}
+
+function closeContenedoresModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("contenedoresModalOverlay").style.display = "none";
+}
+
+function getContenedoresFormData() {
+  return {
+    telegram_username: document.getElementById("contenedorFormUsername").value.trim(),
+    nombre_completo: document.getElementById("contenedorFormNombre").value.trim(),
+    documento: document.getElementById("contenedorFormDocumento").value.trim(),
+    pais: document.getElementById("contenedorFormPais").value.trim(),
+    cantidad: document.getElementById("contenedorFormCantidad").value.trim(),
+    material: document.getElementById("contenedorFormMaterial").value.trim(),
+  };
+}
+
+async function submitContenedoresForm() {
+  const nombre = document.getElementById("contenedorFormNombre").value.trim();
+  if (!nombre) {
+    alert("El campo Nombres y Apellidos es obligatorio.");
+    document.getElementById("contenedorFormNombre").focus();
+    return;
+  }
+  const username = document.getElementById("contenedorFormUsername").value.trim();
+  if (!username) {
+    alert("El usuario de Telegram es obligatorio.");
+    document.getElementById("contenedorFormUsername").focus();
+    return;
+  }
+
+  const btn = document.getElementById("btnContenedoresModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const editId = document.getElementById("contenedoresEditId").value;
+    const data = getContenedoresFormData();
+    let url, method;
+
+    if (editId) {
+      url = "/api/contenedores/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/contenedores/add";
+      method = "POST";
+    }
+
+    const resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al guardar");
+    }
+
+    closeContenedoresModal();
+    contenedoresExpandedRow = null;
+    await loadContenedoresRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = document.getElementById("contenedoresEditId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+function openContenedoresDeleteModal(id) {
+  document.getElementById("contenedoresDeleteId").value = id;
+  document.getElementById("contenedoresDeleteOverlay").style.display = "flex";
+}
+
+function closeContenedoresDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("contenedoresDeleteOverlay").style.display = "none";
+}
+
+async function executeContenedoresDelete() {
+  const id = document.getElementById("contenedoresDeleteId").value;
+  if (!id) return;
+
+  const btn = document.querySelector("#contenedoresDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+
+  try {
+    const resp = await fetch("/api/contenedores/delete/" + id, { method: "DELETE" });
+    if (!resp.ok) throw new Error("Error al eliminar");
+
+    closeContenedoresDeleteModal();
+    contenedoresExpandedRow = null;
+    await loadContenedoresRegistros();
   } catch (err) {
     alert("Ocurrio un error al eliminar. Intenta de nuevo.");
   } finally {

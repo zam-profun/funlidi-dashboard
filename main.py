@@ -1665,6 +1665,248 @@ async def set_dinares_validacion(data: dict = Body(...)):
     return {"success": True, "validado": validado}
 
 
+# ========== CONTENEDORES ENDPOINTS ==========
+
+CONTENEDORES_USERS_TABLE = "contenedores_usuarios"
+CONTENEDORES_FLAG_TABLE = "contenedores_validaciones"
+
+
+def _norm_contenedor_user(value):
+    if not value:
+        return ""
+    s = str(value).strip()
+    if s.startswith("@"):
+        s = s[1:]
+    return s.strip().lower()
+
+
+def _contenedor_to_int(v):
+    if v is None or str(v).strip() == "":
+        return 0
+    try:
+        return int(float(str(v)))
+    except Exception:
+        return 0
+
+
+def _contenedor_flags_map():
+    res = supabase_inventario.table(CONTENEDORES_FLAG_TABLE).select("*").execute()
+    m = {}
+    for f in (res.data or []):
+        key = _norm_contenedor_user(f.get("telegram_username"))
+        if key:
+            m[key] = f
+    return m
+
+
+def _attach_contenedor_flags(rows):
+    flags = _contenedor_flags_map()
+    for r in rows:
+        f = flags.get(_norm_contenedor_user(r.get("telegram_username")))
+        r["validado"] = bool(f and f.get("validado"))
+        r["validated_at"] = (f or {}).get("validated_at")
+        r["flag_telegram_user_id"] = (f or {}).get("telegram_user_id")
+    return rows
+
+
+@app.get("/api/contenedores/data")
+async def get_contenedores_data():
+    result = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("*").order("nombre_completo").execute()
+    rows = result.data or []
+    _attach_contenedor_flags(rows)
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/contenedores/stats")
+async def get_contenedores_stats():
+    result = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("*").execute()
+    rows = result.data or []
+    _attach_contenedor_flags(rows)
+    total = len(rows)
+    validados = sum(1 for r in rows if r.get("validado"))
+    novalidados = total - validados
+    total_cajas = sum(to_int(r.get("cantidad")) for r in rows)
+    paises = {
+        str(r.get("pais")).strip().upper()
+        for r in rows
+        if r.get("pais") and str(r.get("pais")).strip() and str(r.get("pais")).strip().upper() != "VACIO"
+    }
+    ultima = ""
+    for r in rows:
+        v = r.get("validated_at")
+        if v and str(v) > ultima:
+            ultima = str(v)
+    pct = round(validados / total * 100, 1) if total else 0
+    return {
+        "total": total,
+        "validados": validados,
+        "novalidados": novalidados,
+        "pct_validado": pct,
+        "total_cajas": total_cajas,
+        "paises": len(paises),
+        "ultima_validacion": ultima,
+    }
+
+
+@app.get("/api/contenedores/download")
+async def download_contenedores_xlsx():
+    result = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("*").order("nombre_completo").execute()
+    rows = result.data or []
+    _attach_contenedor_flags(rows)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Contenedores"
+    headers = [
+        "Usuario Telegram", "Nombres y Apellidos", "Documento", "Pais",
+        "Cajas", "Material", "Validado", "Validado el", "Creado", "Actualizado",
+    ]
+    ws.append(headers)
+
+    for r in rows:
+        usuario = r.get("telegram_username")
+        if usuario:
+            usuario = usuario if usuario.startswith("@") else "@" + usuario
+        else:
+            usuario = "-"
+        ws.append([
+            usuario,
+            r.get("nombre_completo") or "-",
+            r.get("documento") or "-",
+            r.get("pais") or "-",
+            to_int(r.get("cantidad")),
+            r.get("material") or "-",
+            "Si" if r.get("validado") else "No",
+            formatear_fecha_simple(r.get("validated_at")) if r.get("validated_at") else "-",
+            formatear_fecha_simple(r.get("created_at")),
+            formatear_fecha_simple(r.get("updated_at")),
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="F06292", end_color="F06292", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"Contenedores_Validacion_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/contenedores/add")
+async def add_contenedores_entry(data: dict = Body(...)):
+    nombre = (data.get("nombre_completo") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+    username = _norm_contenedor_user(data.get("telegram_username"))
+    if not username:
+        raise HTTPException(status_code=400, detail="El usuario de Telegram es obligatorio")
+
+    dup = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("id").eq("telegram_username", username).execute()
+    if dup.data:
+        raise HTTPException(status_code=409, detail="Ya existe una persona con ese usuario de Telegram")
+
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "telegram_username": username,
+        "nombre_completo": nombre,
+        "documento": (data.get("documento") or "").strip() or None,
+        "pais": (data.get("pais") or "").strip() or None,
+        "cantidad": _contenedor_to_int(data.get("cantidad")),
+        "material": (data.get("material") or "").strip() or None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    res = supabase_inventario.table(CONTENEDORES_USERS_TABLE).insert(row).execute()
+    return {"success": True, "data": res.data[0] if res.data else row}
+
+
+@app.put("/api/contenedores/edit/{record_id}")
+async def edit_contenedores_entry(record_id: int, data: dict = Body(...)):
+    existing = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("*").eq("id", record_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    old = existing.data[0]
+
+    nombre = (data.get("nombre_completo") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+    username = _norm_contenedor_user(data.get("telegram_username"))
+    if not username:
+        raise HTTPException(status_code=400, detail="El usuario de Telegram es obligatorio")
+
+    old_username = _norm_contenedor_user(old.get("telegram_username"))
+    if username != old_username:
+        dup = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("id").eq("telegram_username", username).execute()
+        if dup.data:
+            raise HTTPException(status_code=409, detail="Ya existe una persona con ese usuario de Telegram")
+
+    row = {
+        "telegram_username": username,
+        "nombre_completo": nombre,
+        "documento": (data.get("documento") or "").strip() or None,
+        "pais": (data.get("pais") or "").strip() or None,
+        "cantidad": _contenedor_to_int(data.get("cantidad")),
+        "material": (data.get("material") or "").strip() or None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    supabase_inventario.table(CONTENEDORES_USERS_TABLE).update(row).eq("id", record_id).execute()
+
+    if old_username and username != old_username:
+        supabase_inventario.table(CONTENEDORES_FLAG_TABLE).update({"telegram_username": username}).eq("telegram_username", old_username).execute()
+
+    return {"success": True}
+
+
+@app.delete("/api/contenedores/delete/{record_id}")
+async def delete_contenedores_entry(record_id: int):
+    existing = supabase_inventario.table(CONTENEDORES_USERS_TABLE).select("*").eq("id", record_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    username = _norm_contenedor_user(existing.data[0].get("telegram_username"))
+    supabase_inventario.table(CONTENEDORES_USERS_TABLE).delete().eq("id", record_id).execute()
+    if username:
+        supabase_inventario.table(CONTENEDORES_FLAG_TABLE).delete().eq("telegram_username", username).execute()
+    return {"success": True}
+
+
+@app.post("/api/contenedores/set-validacion")
+async def set_contenedores_validacion(data: dict = Body(...)):
+    username = _norm_contenedor_user(data.get("telegram_username"))
+    if not username:
+        raise HTTPException(status_code=400, detail="Usuario de Telegram requerido")
+    validado = bool(data.get("validado"))
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "telegram_username": username,
+        "validado": validado,
+        "validated_at": now if validado else None,
+        "updated_at": now,
+    }
+    supabase_inventario.table(CONTENEDORES_FLAG_TABLE).upsert(row, on_conflict="telegram_username").execute()
+    return {"success": True, "validado": validado}
+
+
 # ========== LIDER CANAL ENDPOINTS ==========
 
 LIDER_TABLE = "lider_entradas"

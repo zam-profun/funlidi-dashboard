@@ -25,6 +25,7 @@
           <option value="lider">BOT - LIDER</option>
           <option value="microlingotes">BORRADOR - MICROLINGOTES</option>
           <option value="dinares">BORRADOR - DINARES</option>
+          <option value="contenedores">BORRADOR - CONTENEDORES</option>
           <option value="consulta">CONSULTA GENERAL</option>
           <option value="farley">B. DATOS - FARLEY</option>
           <option value="verificacion">VERIFICACIÓN</option>
@@ -143,6 +144,20 @@
         <span>Estadisticas</span>
       </button>
       <button class="nav-btn" data-section="dinares-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-contenedores" style="display:none">
+      <button class="nav-btn active" data-section="contenedores-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="contenedores-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="contenedores-descargar">
         <span class="material-icons">download</span>
         <span>Descargar</span>
       </button>
@@ -984,6 +999,76 @@
       </div>
     </section>
 
+    <!-- ========== CONTENEDORES SECTIONS ========== -->
+
+    <section class="content-section" id="section-contenedores-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Personas del listado de contenedores. Usa el interruptor para marcar/desmarcar si la persona ya validó su información con el bot. Haz clic en una fila para ver el detalle.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="contenedoresSearchInput" placeholder="Buscar por nombre, documento, país, @usuario..." class="search-input">
+        </div>
+        <select id="contenedoresValidadoFilter" class="flayer-filter">
+          <option value="">Todos los estados</option>
+          <option value="validado">Validado</option>
+          <option value="novalidado">No validado</option>
+        </select>
+        <button class="btn btn-add" id="btnContenedoresAdd">
+          <span class="material-icons">add</span>
+          Añadir
+        </button>
+        <span class="table-count" id="contenedoresTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="contenedoresTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nombres y Apellidos</th>
+              <th>Usuario TG</th>
+              <th>Documento</th>
+              <th>Pais</th>
+              <th>Cajas</th>
+              <th>Validado</th>
+              <th>Validado el</th>
+            </tr>
+          </thead>
+          <tbody id="contenedoresTableBody">
+            <tr class="empty-row">
+              <td colspan="8">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-contenedores-estadisticas">
+      <div class="stats-grid" id="contenedoresStatsGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <section class="content-section" id="section-contenedores-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargará un archivo de Excel con todas las personas del listado de contenedores, incluyendo si han validado su información con el bot.</p>
+        <button class="btn btn-download" id="btnContenedoresDownload">
+          <span class="material-icons">description</span>
+          Descargar XLSX
+        </button>
+        <p class="download-info" id="contenedoresDownloadInfo"></p>
+      </div>
+    </section>
+
     <!-- ========== LIDER SECTIONS ========== -->
 
     <section class="content-section" id="section-lider-registros">
@@ -1798,6 +1883,74 @@
           <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeDinaresDeleteModal()">Cancelar</button>
             <button class="btn btn-danger" onclick="executeDinaresDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== CONTENEDORES MODALS ========== -->
+
+    <div class="modal-overlay" id="contenedoresModalOverlay" style="display:none" onclick="closeContenedoresModal(event)">
+      <div class="modal" id="contenedoresModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">inventory_2</span>
+          <span class="modal-title" id="contenedoresModalTitle">Añadir persona</span>
+          <span class="material-icons modal-close" onclick="closeContenedoresModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="contenedoresEditId" value="">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Telegram @username</label>
+              <input type="text" id="contenedorFormUsername" class="form-input" placeholder="@usuario">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nombres y Apellidos</label>
+              <input type="text" id="contenedorFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Documento de Identidad</label>
+              <input type="text" id="contenedorFormDocumento" class="form-input" placeholder="Ej: 12345678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">País</label>
+              <input type="text" id="contenedorFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cajas</label>
+              <input type="number" id="contenedorFormCantidad" class="form-input" min="0" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Material</label>
+              <input type="text" id="contenedorFormMaterial" class="form-input" placeholder="CAJAS DINARES IRAKIES ROJOS X 40.000 NOTAS">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeContenedoresModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnContenedoresModalSubmit" onclick="submitContenedoresForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="contenedoresDeleteOverlay" style="display:none" onclick="closeContenedoresDeleteModal(event)">
+      <div class="modal modal-sm" id="contenedoresDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar persona</span>
+          <span class="material-icons modal-close" onclick="closeContenedoresDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">¿Seguro de eliminar?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta acción no se puede deshacer. La validación asociada también se eliminará.</p>
+          <input type="hidden" id="contenedoresDeleteId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeContenedoresDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeContenedoresDelete()">Eliminar</button>
           </div>
         </div>
       </div>
