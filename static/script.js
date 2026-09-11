@@ -2074,6 +2074,45 @@ function initCisDownload() {
   document.getElementById("btnCisExportPdfHab").addEventListener("click", () => exportCisBatch("pdf", "habilitados", "btnCisExportPdfHab"));
   document.getElementById("btnCisExportDocxAll").addEventListener("click", () => exportCisBatch("docx", "all", "btnCisExportDocxAll"));
   document.getElementById("btnCisExportPdfAll").addEventListener("click", () => exportCisBatch("pdf", "all", "btnCisExportPdfAll"));
+  document.getElementById("btnCisTemplateUpload").addEventListener("click", uploadCisTemplate);
+  loadCisTemplateStatus();
+}
+
+function loadCisTemplateStatus() {
+  const el = document.getElementById("cisTemplateStatus");
+  fetch("/api/cis/template/status")
+    .then((resp) => resp.json())
+    .then((d) => {
+      if (d.source === "uploaded") el.textContent = "Plantilla activa: subida (" + (d.filename || "") + ").";
+      else if (d.source === "env") el.textContent = "Plantilla activa: configurada por variable de entorno.";
+      else if (d.source === "bundled") el.textContent = "Plantilla activa: incluida en el servidor.";
+      else el.textContent = "Sin plantilla: suba el .docx para poder generar documentos.";
+    })
+    .catch(() => { el.textContent = "No se pudo consultar la plantilla."; });
+}
+
+function uploadCisTemplate() {
+  const input = document.getElementById("cisTemplateFile");
+  if (!input.files || !input.files[0]) {
+    alert("Seleccione un archivo .docx primero.");
+    return;
+  }
+  const btn = document.getElementById("btnCisTemplateUpload");
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append("file", input.files[0]);
+  fetch("/api/cis/template", { method: "POST", body: fd })
+    .then((resp) => {
+      if (!resp.ok) return resp.json().catch(() => ({})).then((j) => { throw new Error(j.detail || "Error al subir"); });
+      return resp.json();
+    })
+    .then(() => {
+      input.value = "";
+      loadCisTemplateStatus();
+      alert("Plantilla guardada.");
+    })
+    .catch((err) => alert(err.message || "Ocurrio un error al subir."))
+    .finally(() => { btn.disabled = false; });
 }
 
 function getCisFilename(resp) {
@@ -2195,18 +2234,35 @@ function buildCisDetailHtml(r) {
     ? '<button class="btn btn-secondary" onclick="toggleCisHabilitado(\'' + r.id + '\')">Deshabilitar</button>'
     : '<button class="btn btn-primary" onclick="toggleCisHabilitado(\'' + r.id + '\')">Habilitar</button>';
     return '<div class="ayudas-detail-card"><div class="ayudas-detail-grid">' + items + '</div><div class="ayudas-detail-actions">' + estadoBtn +
+    ' <button class="btn btn-primary" onclick="event.stopPropagation();downloadCisFast(\'' + r.id + '\')">Generar DOCX</button>' +
     ' <button class="btn btn-secondary" onclick="event.stopPropagation();openCisPreview(\'' + r.id + '\')">Vista previa PDF</button>' +
-    ' <button class="btn btn-secondary" onclick="event.stopPropagation();downloadCisFile(\'' + r.id + '\',\'docx\')">DOCX</button>' +
+    ' <button class="btn btn-secondary" onclick="event.stopPropagation();downloadCisFile(\'' + r.id + '\',\'docx\')">DOCX completo</button>' +
     ' <button class="btn btn-secondary" onclick="event.stopPropagation();downloadCisFile(\'' + r.id + '\',\'pdf\')">PDF</button>' +
     ' <button class="btn btn-secondary" onclick="event.stopPropagation();openCisEditModal(\'' + r.id + '\')">Editar</button>' +
     ' <button class="btn btn-danger" onclick="event.stopPropagation();openCisDeleteModal(\'' + r.id + '\')">Eliminar</button></div></div>';
 }
 
+function downloadCisFast(id) {
+  window.open("/api/cis/generate/" + id, "_blank");
+}
+
 function openCisPreview(id) {
   const r = cisAllData.find((item) => item.id === id);
   document.getElementById("cisPreviewTitle").textContent = "Vista previa - " + (r && r.nombre_completo ? r.nombre_completo : "CIS");
-  document.getElementById("cisPreviewFrame").src = "/api/cis/preview/" + id;
+  document.getElementById("cisPreviewFrame").src = "about:blank";
   document.getElementById("cisPreviewOverlay").style.display = "flex";
+  fetch("/api/cis/preview/" + id)
+    .then((resp) => {
+      if (!resp.ok) return resp.json().catch(() => ({})).then((j) => { throw new Error(j.detail || "No se pudo generar la vista previa"); });
+      return resp.blob();
+    })
+    .then((blob) => {
+      document.getElementById("cisPreviewFrame").src = URL.createObjectURL(blob);
+    })
+    .catch((err) => {
+      closeCisPreview();
+      alert(err.message || "No se pudo generar la vista previa.");
+    });
 }
 
 function closeCisPreview(event) {

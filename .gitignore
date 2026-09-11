@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 .creds-funlidi
 *.creds-funlidi
+# Uploaded CIS template override (ephemeral; commit replacements under cis_engine/TEMPLATES/ instead)
+data_to_show/cis_template.docx

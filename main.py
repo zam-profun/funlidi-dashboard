@@ -12,7 +12,7 @@ from collections import defaultdict
 import openpyxl
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Body, HTTPException, Request
+from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client, Client
@@ -1402,7 +1402,27 @@ async def toggle_cis_habilitado(record_id: str):
 
 # ========== CIS DOCUMENT GENERATION (preview + export) ==========
 
-SYS_GROUP_DIR = r"C:\Users\amazi\Desktop\mariaelvira\sys-group"
+# Folder with fill_cis.py + generar_cis.py (+ cis_pdf.py for Word PDF export).
+# Resolution order: CIS_ENGINE_DIR env var -> vendored ./cis_engine (Render) ->
+# legacy local sys-group path. Only fill_cis.py + generar_cis.py (+ python-docx)
+# are needed for fast DOCX.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _resolve_engine_dir():
+    if os.environ.get("CIS_ENGINE_DIR"):
+        return os.environ["CIS_ENGINE_DIR"]
+    vendored = os.path.join(APP_DIR, "cis_engine")
+    if os.path.isdir(vendored):
+        return vendored
+    return r"C:\Users\amazi\Desktop\mariaelvira\sys-group"
+
+
+SYS_GROUP_DIR = _resolve_engine_dir()
+
+# Uploaded template override (remembered on server disk).
+CIS_TEMPLATE_OVERRIDE = os.path.join(DATA_DIR, "cis_template.docx")
+CIS_TEMPLATE_MAX_BYTES = 25 * 1024 * 1024
 
 
 def _cis_engine():
@@ -1410,8 +1430,25 @@ def _cis_engine():
     if SYS_GROUP_DIR not in _sys.path:
         _sys.path.insert(0, SYS_GROUP_DIR)
     import generar_cis
-    import cis_pdf
+    try:
+        import cis_pdf
+    except ImportError:
+        cis_pdf = None
     return generar_cis, cis_pdf
+
+
+def _cis_template_path():
+    """Resolve the template: uploaded override -> CIS_TEMPLATE_FILE env ->
+    bundled (cis_engine/TEMPLATES) -> None."""
+    if os.path.exists(CIS_TEMPLATE_OVERRIDE):
+        return CIS_TEMPLATE_OVERRIDE, "uploaded"
+    env_path = os.environ.get("CIS_TEMPLATE_FILE")
+    if env_path and os.path.exists(env_path):
+        return env_path, "env"
+    bundled = os.path.join(SYS_GROUP_DIR, "TEMPLATES", "MODELO CIS.docx")
+    if os.path.exists(bundled):
+        return bundled, "bundled"
+    return None, "missing"
 
 
 def _cis_row_or_404(record_id: str):
@@ -1429,19 +1466,83 @@ def _cis_scope_rows(scope: str):
     return result.data or []
 
 
-@app.get("/api/cis/preview/{record_id}")
-async def preview_cis_pdf(record_id: str):
-    """Generate the client's CIS and stream it back as an inline PDF preview."""
+@app.get("/api/cis/template/status")
+async def cis_template_status():
+    """Report which CIS template generation will use (uploaded / bundled / missing)."""
+    path, source = _cis_template_path()
+    return {
+        "source": source,
+        "filename": os.path.basename(path) if path else None,
+        "size_bytes": os.path.getsize(path) if path else 0,
+    }
+
+
+@app.post("/api/cis/template")
+async def upload_cis_template(file: UploadFile = File(...)):
+    """Upload the CIS .docx template (remembered server-side, overrides bundled)."""
+    name = (file.filename or "").lower()
+    if not name.endswith(".docx"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .docx")
+    content = await file.read()
+    if not content or len(content) > CIS_TEMPLATE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Archivo vacio o demasiado grande (max 25 MB)")
+    if content[:2] != b"PK":
+        raise HTTPException(status_code=400, detail="No parece un .docx valido")
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(CIS_TEMPLATE_OVERRIDE, "wb") as f:
+        f.write(content)
+    return {"success": True, "filename": file.filename, "size_bytes": len(content)}
+
+
+@app.get("/api/cis/generate/{record_id}")
+async def generate_cis_docx(record_id: str):
+    """Fast per-person DOCX generation from the Supabase row (no photo, no Word)."""
     import tempfile
-    generar_cis, cis_pdf = _cis_engine()
+    generar_cis, _ = _cis_engine()
+    template_path, source = _cis_template_path()
+    if not template_path:
+        raise HTTPException(status_code=400, detail="No hay plantilla CIS. Suba el .docx con /api/cis/template.")
     row = _cis_row_or_404(record_id)
     c = generar_cis.row_to_client(row)
     if not c.get("doc_number"):
         raise HTTPException(status_code=400, detail="El cliente no tiene documento")
     with tempfile.TemporaryDirectory() as tmp:
-        docx_path = generar_cis.build_cis_file(c, out_dir=tmp)
+        docx_path = generar_cis.build_cis_file(c, out_dir=tmp, template_path=template_path, skip_image=True)
+        with open(docx_path, "rb") as f:
+            content = f.read()
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{os.path.basename(docx_path)}"'},
+    )
+
+
+def _require_cis_pdf():
+    generar_cis, cis_pdf = _cis_engine()
+    if cis_pdf is None:
+        raise HTTPException(status_code=400, detail="PDF no disponible en este servidor (falta Word). Use DOCX.")
+    return generar_cis, cis_pdf
+
+
+@app.get("/api/cis/preview/{record_id}")
+async def preview_cis_pdf(record_id: str):
+    """Generate the client's CIS and stream it back as an inline PDF preview."""
+    import tempfile
+    generar_cis, cis_pdf = _require_cis_pdf()
+    template_path, source = _cis_template_path()
+    if not template_path:
+        raise HTTPException(status_code=400, detail="No hay plantilla CIS. Suba el .docx con /api/cis/template.")
+    row = _cis_row_or_404(record_id)
+    c = generar_cis.row_to_client(row)
+    if not c.get("doc_number"):
+        raise HTTPException(status_code=400, detail="El cliente no tiene documento")
+    with tempfile.TemporaryDirectory() as tmp:
+        docx_path = generar_cis.build_cis_file(c, out_dir=tmp, template_path=template_path)
         pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
-        cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+        try:
+            cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+        except Exception:
+            raise HTTPException(status_code=500, detail="No se pudo convertir a PDF en este servidor. Use DOCX.")
         with open(pdf_path, "rb") as f:
             content = f.read()
     hoy = datetime.now(COL_TZ)
@@ -1461,12 +1562,17 @@ async def download_cis_file(record_id: str, format: str = "docx"):
     if fmt not in ("docx", "pdf"):
         raise HTTPException(status_code=400, detail="Formato invalido (docx|pdf)")
     generar_cis, cis_pdf = _cis_engine()
+    if fmt == "pdf" and cis_pdf is None:
+        raise HTTPException(status_code=400, detail="PDF no disponible en este servidor (falta Word). Use DOCX.")
+    template_path, source = _cis_template_path()
+    if not template_path:
+        raise HTTPException(status_code=400, detail="No hay plantilla CIS. Suba el .docx con /api/cis/template.")
     row = _cis_row_or_404(record_id)
     c = generar_cis.row_to_client(row)
     if not c.get("doc_number"):
         raise HTTPException(status_code=400, detail="El cliente no tiene documento")
     with tempfile.TemporaryDirectory() as tmp:
-        docx_path = generar_cis.build_cis_file(c, out_dir=tmp)
+        docx_path = generar_cis.build_cis_file(c, out_dir=tmp, template_path=template_path)
         if fmt == "docx":
             with open(docx_path, "rb") as f:
                 content = f.read()
@@ -1474,7 +1580,10 @@ async def download_cis_file(record_id: str, format: str = "docx"):
             fname = os.path.basename(docx_path)
         else:
             pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
-            cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+            try:
+                cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+            except Exception:
+                raise HTTPException(status_code=500, detail="No se pudo convertir a PDF en este servidor. Use DOCX.")
             with open(pdf_path, "rb") as f:
                 content = f.read()
             media = "application/pdf"
@@ -1497,6 +1606,11 @@ async def export_cis_batch(format: str = "docx", scope: str = "habilitados"):
     if scope not in ("all", "habilitados"):
         raise HTTPException(status_code=400, detail="Scope invalido (all|habilitados)")
     generar_cis, cis_pdf = _cis_engine()
+    if fmt == "pdf" and cis_pdf is None:
+        raise HTTPException(status_code=400, detail="PDF no disponible en este servidor (falta Word). Use DOCX.")
+    template_path, source = _cis_template_path()
+    if not template_path:
+        raise HTTPException(status_code=400, detail="No hay plantilla CIS. Suba el .docx con /api/cis/template.")
     rows = _cis_scope_rows(scope)
     if not rows:
         raise HTTPException(status_code=404, detail="No hay registros para exportar")
@@ -1513,7 +1627,7 @@ async def export_cis_batch(format: str = "docx", scope: str = "habilitados"):
                         c = generar_cis.row_to_client(row)
                         if not c.get("doc_number"):
                             continue
-                        docx_path = generar_cis.build_cis_file(c, out_dir=outdir)
+                        docx_path = generar_cis.build_cis_file(c, out_dir=outdir, template_path=template_path)
                         pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
                         batch.convert(docx_path, pdf_path)
                         try:
@@ -1529,7 +1643,7 @@ async def export_cis_batch(format: str = "docx", scope: str = "habilitados"):
                     c = generar_cis.row_to_client(row)
                     if not c.get("doc_number"):
                         continue
-                    paths.append(generar_cis.build_cis_file(c, out_dir=outdir))
+                    paths.append(generar_cis.build_cis_file(c, out_dir=outdir, template_path=template_path))
                 except Exception:
                     continue
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
