@@ -22,6 +22,7 @@
           <option value="pagos">FUNLIDI - PAGOS</option>
           <option value="ayudas">BOT - AYUDAS H.</option>
           <option value="inventario">BOT - INVENTARIO</option>
+          <option value="cis">BOT - CIS</option>
           <option value="lider">BOT - LIDER</option>
           <option value="microlingotes">BORRADOR - MICROLINGOTES</option>
           <option value="dinares">BORRADOR - DINARES</option>
@@ -104,6 +105,20 @@
       <button class="nav-btn" data-section="inventario-productos">
         <span class="material-icons">inventory_2</span>
         <span>Productos</span>
+      </button>
+    </nav>
+    <nav class="sidebar-nav" id="nav-cis" style="display:none">
+      <button class="nav-btn active" data-section="cis-registros">
+        <span class="material-icons">list_alt</span>
+        <span>Registros</span>
+      </button>
+      <button class="nav-btn" data-section="cis-estadisticas">
+        <span class="material-icons">bar_chart</span>
+        <span>Estadisticas</span>
+      </button>
+      <button class="nav-btn" data-section="cis-descargar">
+        <span class="material-icons">download</span>
+        <span>Descargar</span>
       </button>
     </nav>
     <nav class="sidebar-nav" id="nav-lider" style="display:none">
@@ -1672,6 +1687,102 @@
       </div>
     </div>
 
+    <!-- ========== CIS SECTIONS ========== -->
+
+    <section class="content-section" id="section-cis-registros">
+      <div class="info-banner">
+        <span class="material-icons">info</span>
+        <p>Clientes registrados para la generacion del documento CIS. Haz clic en una fila para ver el detalle completo y activar/desactivar la entrega via el bot.</p>
+      </div>
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="material-icons">search</span>
+          <input type="text" id="cisSearchInput" placeholder="Buscar por nombre, documento, pais..." class="search-input">
+        </div>
+        <select id="cisTipoFilter" class="flayer-filter">
+          <option value="">Todos los tipos</option>
+          <option value="PASAPORTE">Pasaporte</option>
+          <option value="ID">Cedula / CC</option>
+        </select>
+        <select id="cisEstadoFilter" class="flayer-filter">
+          <option value="">Todos los estados</option>
+          <option value="habilitado">Habilitado</option>
+          <option value="no">No habilitado</option>
+        </select>
+        <button class="btn btn-add" id="btnCisAdd">
+          <span class="material-icons">add</span>
+          Anadir
+        </button>
+        <span class="table-count" id="cisTableCount">0 registros</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" id="cisTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Nombre Completo</th>
+              <th>Documento</th>
+              <th>Pais</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th>Actualizacion</th>
+            </tr>
+          </thead>
+          <tbody id="cisTableBody">
+            <tr class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <span class="material-icons empty-icon">inbox</span>
+                  <p>Cargando datos...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section" id="section-cis-estadisticas">
+      <div class="stats-grid" id="cisStatsGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <section class="content-section" id="section-cis-descargar">
+      <div class="download-container">
+        <span class="material-icons download-icon">file_download</span>
+        <h3>Descargar datos en Excel</h3>
+        <p class="download-desc">Se descargara un archivo de Excel con todos los datos de los clientes CIS.</p>
+        <button class="btn btn-primary" id="btnCisDownload">
+          <span class="material-icons">download</span>
+          Descargar Excel
+        </button>
+      </div>
+      <div class="download-container" style="margin-top:16px">
+        <span class="material-icons download-icon">picture_as_pdf</span>
+        <h3>Exportar documentos CIS</h3>
+        <p class="download-desc">Genera los documentos rellenos en lote (puede tardar varios minutos para muchos clientes).</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <button class="btn btn-secondary" id="btnCisExportDocxHab">
+            <span class="material-icons">description</span>
+            DOCX habilitados
+          </button>
+          <button class="btn btn-secondary" id="btnCisExportPdfHab">
+            <span class="material-icons">picture_as_pdf</span>
+            PDF habilitados
+          </button>
+          <button class="btn btn-secondary" id="btnCisExportDocxAll">
+            <span class="material-icons">description</span>
+            DOCX todos
+          </button>
+          <button class="btn btn-secondary" id="btnCisExportPdfAll">
+            <span class="material-icons">picture_as_pdf</span>
+            PDF todos
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- ========== INVENTARIO MODALS ========== -->
 
     <div class="modal-overlay" id="inventarioModalOverlay" style="display:none" onclick="closeInventarioModal(event)">
@@ -1748,6 +1859,200 @@
             <button class="btn btn-secondary" onclick="closeInventarioDeleteModal()">Cancelar</button>
             <button class="btn btn-danger" onclick="executeInventarioDelete()">Eliminar</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== CIS MODALS ========== -->
+
+    <div class="modal-overlay" id="cisModalOverlay" style="display:none" onclick="closeCisModal(event)">
+      <div class="modal" id="cisModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">assignment</span>
+          <span class="modal-title" id="cisModalTitle">Anadir cliente</span>
+          <span class="material-icons modal-close" onclick="closeCisModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="cisEditId" value="">
+          <div class="form-group">
+            <label class="form-label">Nombre Completo</label>
+            <input type="text" id="cisFormNombre" class="form-input" placeholder="Ej: JUAN PEREZ">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Primer Nombre</label>
+              <input type="text" id="cisFormFirst" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Segundo Nombre</label>
+              <input type="text" id="cisFormMiddle" class="form-input">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Apellidos</label>
+              <input type="text" id="cisFormLast" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Genero (MALE / FEMALE)</label>
+              <select id="cisFormGender" class="form-input">
+                <option value="MALE">MALE</option>
+                <option value="FEMALE">FEMALE</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Fecha Nacimiento</label>
+              <input type="text" id="cisFormDob" class="form-input" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="form-group">
+              <label class="form-label">SSN</label>
+              <input type="text" id="cisFormSsn" class="form-input" placeholder="N/A">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pais Ciudadania</label>
+              <input type="text" id="cisFormCountryCit" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Idiomas</label>
+              <input type="text" id="cisFormLanguages" class="form-input" placeholder="SPANISH">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre de Oficial (firma)</label>
+            <input type="text" id="cisFormOfficer" class="form-input">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Tipo Documento</label>
+              <select id="cisFormTipo" class="form-input">
+                <option value="PASAPORTE">PASAPORTE</option>
+                <option value="ID">CC / ID</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pasaporte</label>
+              <input type="text" id="cisFormPasaporte" class="form-input" placeholder="Ej: AV462241">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">CC / Cedula</label>
+              <input type="text" id="cisFormCc" class="form-input" placeholder="Ej: 88199692">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pais</label>
+              <input type="text" id="cisFormPais" class="form-input" placeholder="Ej: COLOMBIA">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Fecha Expedicion</label>
+              <input type="text" id="cisFormFechaExp" class="form-input" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha Vencimiento</label>
+              <input type="text" id="cisFormFechaVenc" class="form-input" placeholder="DD/MM/YYYY">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Autoridad Emisora</label>
+            <input type="text" id="cisFormAutoridad" class="form-input" placeholder="Ej: G. NORTE DE SANTANDER">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Direccion</label>
+              <input type="text" id="cisFormDireccion" class="form-input" placeholder="Calle, numero, etc.">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Codigo Postal</label>
+              <input type="text" id="cisFormZip" class="form-input" placeholder="Ej: 540004">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Ciudad</label>
+              <input type="text" id="cisFormCiudad" class="form-input" placeholder="Ej: CUCUTA">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Departamento</label>
+              <input type="text" id="cisFormDepartamento" class="form-input" placeholder="Ej: NORTE DE SANTANDER">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Urbanizacion</label>
+              <input type="text" id="cisFormUrbanizacion" class="form-input" placeholder="N/A">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Distrito</label>
+              <input type="text" id="cisFormDistrito" class="form-input" placeholder="N/A">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Telefono</label>
+              <input type="text" id="cisFormTelefono" class="form-input" placeholder="(+57) ...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Correo</label>
+              <input type="text" id="cisFormCorreo" class="form-input" placeholder="correo@dominio.com">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Telegram @</label>
+              <input type="text" id="cisFormTelegram" class="form-input" placeholder="@usuario">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cantidad Participacion</label>
+              <input type="number" id="cisFormCantidad" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="cisFormHabilitado" style="width:auto"> Habilitado (permite solicitar CIS via bot)
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeCisModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btnCisModalSubmit" onclick="submitCisForm()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="cisDeleteOverlay" style="display:none" onclick="closeCisDeleteModal(event)">
+      <div class="modal modal-sm" id="cisDeleteModal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon" style="color:#ef5350">warning</span>
+          <span class="modal-title">Eliminar registro</span>
+          <span class="material-icons modal-close" onclick="closeCisDeleteModal()">close</span>
+        </div>
+        <div class="modal-body">
+          <p style="text-align:center;font-size:15px;margin:16px 0">Seguro de eliminar?</p>
+          <p style="text-align:center;font-size:13px;color:#9E9E9E;margin-bottom:20px">Esta accion no se puede deshacer.</p>
+          <input type="hidden" id="cisDeleteId" value="">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeCisDeleteModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="executeCisDelete()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="cisPreviewOverlay" style="display:none" onclick="closeCisPreview(event)">
+      <div class="modal" id="cisPreviewModal" onclick="event.stopPropagation()" style="max-width:900px;width:92%">
+        <div class="modal-header">
+          <span class="material-icons modal-header-icon">visibility</span>
+          <span class="modal-title" id="cisPreviewTitle">Vista previa del CIS</span>
+          <span class="material-icons modal-close" onclick="closeCisPreview()">close</span>
+        </div>
+        <div class="modal-body">
+          <iframe id="cisPreviewFrame" style="width:100%;height:70vh;border:1px solid #ccc" title="Vista previa CIS"></iframe>
         </div>
       </div>
     </div>

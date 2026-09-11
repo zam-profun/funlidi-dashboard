@@ -3,6 +3,23 @@ let refreshInterval = null;
 let lastRefreshTime = null;
 let currentModule = "bot";
 
+// Users allowed to see and use the CIS module. Server enforces this too.
+const CIS_ALLOWED_USERS = ["Angel", "Jeovani"];
+
+function cisAccessAllowed() {
+  const name = (document.getElementById("userNameDisplay").textContent || "").trim();
+  return CIS_ALLOWED_USERS.includes(name);
+}
+
+function applyCisAccess() {
+  if (cisAccessAllowed()) return;
+  const sel = document.getElementById("moduleSelector");
+  const opt = sel.querySelector('option[value="cis"]');
+  if (opt) opt.remove();
+  const nav = document.getElementById("nav-cis");
+  if (nav) nav.style.display = "none";
+}
+
 document.addEventListener("DOMContentLoaded", function() {
   checkAuth().then(function(resp) {
     if (resp.authenticated) {
@@ -53,6 +70,7 @@ function logout() {
 }
 
 function initializeApp() {
+  applyCisAccess();
   initNavigation();
   initModuleSelector();
   initRefresh();
@@ -64,6 +82,8 @@ function initializeApp() {
   initInventarioSearch();
   initInventarioDownload();
   initInventarioProductos();
+  initCisSearch();
+  initCisDownload();
   initLiderSearch();
   initLiderDownload();
   initMicrolingotesSearch();
@@ -111,12 +131,18 @@ function goLiderModule() {
 }
 
 function switchModule(module) {
+  if (module === "cis" && !cisAccessAllowed()) {
+    switchModule("bot");
+    document.getElementById("moduleSelector").value = "bot";
+    return;
+  }
   currentModule = module;
   document.getElementById("btnModuleLider").classList.toggle("active", module === "lider");
   document.getElementById("nav-bot").style.display = module === "bot" ? "" : "none";
   document.getElementById("nav-pagos").style.display = module === "pagos" ? "" : "none";
   document.getElementById("nav-ayudas").style.display = module === "ayudas" ? "" : "none";
   document.getElementById("nav-inventario").style.display = module === "inventario" ? "" : "none";
+  document.getElementById("nav-cis").style.display = module === "cis" ? "" : "none";
   document.getElementById("nav-lider").style.display = module === "lider" ? "" : "none";
   document.getElementById("nav-microlingotes").style.display = module === "microlingotes" ? "" : "none";
   document.getElementById("nav-dinares").style.display = module === "dinares" ? "" : "none";
@@ -131,6 +157,7 @@ function switchModule(module) {
 
   document.body.classList.toggle("theme-ayudas", module === "ayudas");
   document.body.classList.toggle("theme-inventario", module === "inventario");
+  document.body.classList.toggle("theme-cis", module === "cis");
   document.body.classList.toggle("theme-lider", module === "lider");
   document.body.classList.toggle("theme-microlingotes", module === "microlingotes");
   document.body.classList.toggle("theme-dinares", module === "dinares");
@@ -172,6 +199,9 @@ function switchSection(section) {
     "inventario-estadisticas": "Estadisticas - Inventario",
     "inventario-descargar": "Descargar - Inventario",
     "inventario-productos": "Productos - Inventario",
+    "cis-registros": "Registros - CIS",
+    "cis-estadisticas": "Estadisticas - CIS",
+    "cis-descargar": "Descargar - CIS",
     "lider-registros": "Registros - Lider",
     "lider-estadisticas": "Estadisticas - Lider",
     "lider-descargar": "Descargar - Lider",
@@ -215,6 +245,8 @@ function loadSection(section) {
   if (section === "inventario-registros") loadInventarioRegistros();
   if (section === "inventario-estadisticas") loadInventarioStats();
   if (section === "inventario-productos") loadInventarioProductos();
+  if (section === "cis-registros") loadCisRegistros();
+  if (section === "cis-estadisticas") loadCisStats();
   if (section === "lider-registros") loadLiderRegistros();
   if (section === "lider-estadisticas") loadLiderStats();
   if (section === "microlingotes-registros") loadMicrolingotesRegistros();
@@ -1993,6 +2025,402 @@ async function executeInventarioDelete() {
     closeInventarioDeleteModal();
     inventarioExpandedRow = null;
     await loadInventarioRegistros();
+  } catch (err) {
+    alert("Ocurrio un error al eliminar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Eliminar";
+  }
+}
+
+
+// ========== CIS FUNCTIONS ==========
+
+let cisAllData = [];
+let cisExpandedRow = null;
+
+function initCisSearch() {
+  document.getElementById("cisSearchInput").addEventListener("input", renderCisTable);
+  document.getElementById("cisTipoFilter").addEventListener("change", renderCisTable);
+  document.getElementById("cisEstadoFilter").addEventListener("change", renderCisTable);
+  document.getElementById("btnCisAdd").addEventListener("click", openCisAddModal);
+}
+
+function initCisDownload() {
+  document.getElementById("btnCisDownload").addEventListener("click", async () => {
+    const btn = document.getElementById("btnCisDownload");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons">hourglass_top</span> Preparando archivo...';
+    try {
+      const resp = await fetch("/api/cis/download");
+      if (!resp.ok) throw new Error("Error al descargar");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getCisFilename(resp);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Ocurrio un error al descargar. Intenta de nuevo.");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-icons">download</span> Descargar Excel';
+    }
+  });
+  document.getElementById("btnCisExportDocxHab").addEventListener("click", () => exportCisBatch("docx", "habilitados", "btnCisExportDocxHab"));
+  document.getElementById("btnCisExportPdfHab").addEventListener("click", () => exportCisBatch("pdf", "habilitados", "btnCisExportPdfHab"));
+  document.getElementById("btnCisExportDocxAll").addEventListener("click", () => exportCisBatch("docx", "all", "btnCisExportDocxAll"));
+  document.getElementById("btnCisExportPdfAll").addEventListener("click", () => exportCisBatch("pdf", "all", "btnCisExportPdfAll"));
+}
+
+function getCisFilename(resp) {
+  const header = resp.headers.get("Content-Disposition");
+  if (header) {
+    const m = header.match(/filename="(.+)"/);
+    if (m) return m[1];
+  }
+  return "CIS.xlsx";
+}
+
+async function loadCisRegistros() {
+  const tbody = document.getElementById("cisTableBody");
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  try {
+    const resp = await fetch("/api/cis/data");
+    if (!resp.ok) throw new Error("Error");
+    const json = await resp.json();
+    cisAllData = json.data || [];
+    renderCisTable();
+    updateRefreshIndicator(false);
+  } catch (err) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar datos.</p></div></td></tr>';
+  }
+}
+
+function cisDocNumber(r) {
+  if (r.tipo_documento === "ID") return r.cc || "-";
+  return r.pasaporte || r.cc || "-";
+}
+
+function cisHabilitadoBadge(r) {
+  if (r.habilitado) return '<span class="estado-badge estado-completo">Habilitado</span>';
+  return '<span class="estado-badge estado-incompleto">No habilitado</span>';
+}
+
+function toggleCisHabilitado(id) {
+  fetch("/api/cis/toggle-habilitado/" + id, { method: "PUT" })
+    .then((resp) => resp.json())
+    .then(() => loadCisRegistros())
+    .catch(() => alert("Ocurrio un error al cambiar el estado."));
+}
+
+function renderCisTable() {
+  const tbody = document.getElementById("cisTableBody");
+  const search = document.getElementById("cisSearchInput").value.toLowerCase();
+  const tipoFilter = document.getElementById("cisTipoFilter").value;
+  const estadoFilter = document.getElementById("cisEstadoFilter").value;
+
+  let filtered = cisAllData;
+  if (search) {
+    filtered = filtered.filter((r) =>
+      [r.nombre_completo, r.pasaporte, r.cc, r.pais, r.telegram, r.correo]
+        .some((v) => v && String(v).toLowerCase().includes(search))
+    );
+  }
+  if (tipoFilter) {
+    filtered = filtered.filter((r) => (r.tipo_documento || "").toUpperCase() === tipoFilter);
+  }
+  if (estadoFilter) {
+    filtered = filtered.filter((r) => estadoFilter === "habilitado" ? r.habilitado : !r.habilitado);
+  }
+
+  document.getElementById("cisTableCount").textContent = filtered.length + " registro" + (filtered.length !== 1 ? "s" : "");
+
+  if (filtered.length === 0) {
+    const msg = search || tipoFilter || estadoFilter ? "No se encontraron registros con esos filtros." : "Aun no hay registros de CIS.";
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>' + msg + '</p></div></td></tr>';
+    return;
+  }
+
+  let html = "";
+  for (let i = 0; i < filtered.length; i++) {
+    const r = filtered[i];
+    const flag = getCountryFlag(r.pais);
+    const expandIcon = cisExpandedRow === i ? "expand_less" : "expand_more";
+    const isExpanded = cisExpandedRow === i;
+
+    html += '<tr class="ayudas-row" onclick="toggleCisDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
+    html += '<td><strong>' + escHtml(r.nombre_completo || "-") + '</strong></td>';
+    html += '<td>' + escHtml(cisDocNumber(r)) + '</td>';
+    html += '<td>' + flag + ' ' + escHtml(r.pais || "-") + '</td>';
+    html += '<td>' + (r.tipo_documento || "-") + '</td>';
+    html += '<td>' + cisHabilitadoBadge(r) + '</td>';
+    html += '<td>' + formatDate(r.updated_at || r.created_at) + '</td>';
+    html += '</tr>';
+
+    if (isExpanded) {
+      html += '<tr class="ayudas-detail-row"><td colspan="7">' + buildCisDetailHtml(r) + '</td></tr>';
+    }
+  }
+  tbody.innerHTML = html;
+}
+
+function buildCisDetailHtml(r) {
+  const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" ? String(v).trim() : "-";
+  const flag = getCountryFlag(r.pais);
+  const rows = [
+    { icon: "badge", label: "Tipo documento", val: f(r.tipo_documento) },
+    { icon: "fingerprint", label: "Pasaporte", val: f(r.pasaporte) },
+    { icon: "fingerprint", label: "CC / Cedula", val: f(r.cc) },
+    { icon: "cake", label: "Fecha de nacimiento", val: f(r.date_of_birth) },
+    { icon: "person", label: "Genero", val: f(r.gender) },
+    { icon: "phone", label: "Telefono", val: f(r.telephone) },
+    { icon: "mail", label: "Correo", val: f(r.email) },
+    { icon: "event", label: "Expedicion", val: f(r.fecha_expedicion) },
+    { icon: "event", label: "Vencimiento", val: f(r.fecha_vencimiento) },
+    { icon: "account_balance", label: "Autoridad emisora", val: f(r.autoridad_emisora) },
+    { icon: "home", label: "Direccion", val: f(r.street_address) },
+    { icon: "location_city", label: "Ciudad", val: f(r.ciudad) },
+    { icon: "map", label: "Departamento", val: f(r.departamento) },
+    { icon: "public", label: "Pais", val: flag + " " + f(r.pais) },
+    { icon: "pin", label: "Codigo postal", val: f(r.codigo_postal) },
+    { icon: "telegram", label: "Telegram", val: r.telegram ? "@" + String(r.telegram).replace(/^@/, "") : "-" },
+    { icon: "paid", label: "Cantidad participacion", val: f(r.cantidad_participacion) },
+  ];
+  const items = rows.map((x) => '<div class="ayudas-detail-item"><span class="material-icons ayudas-detail-icon">' + x.icon + '</span><span class="ayudas-detail-label">' + x.label + '</span><span class="ayudas-detail-value">' + x.val + '</span></div>').join("");
+  const estadoBtn = r.habilitado
+    ? '<button class="btn btn-secondary" onclick="toggleCisHabilitado(\'' + r.id + '\')">Deshabilitar</button>'
+    : '<button class="btn btn-primary" onclick="toggleCisHabilitado(\'' + r.id + '\')">Habilitar</button>';
+    return '<div class="ayudas-detail-card"><div class="ayudas-detail-grid">' + items + '</div><div class="ayudas-detail-actions">' + estadoBtn +
+    ' <button class="btn btn-secondary" onclick="event.stopPropagation();openCisPreview(\'' + r.id + '\')">Vista previa PDF</button>' +
+    ' <button class="btn btn-secondary" onclick="event.stopPropagation();downloadCisFile(\'' + r.id + '\',\'docx\')">DOCX</button>' +
+    ' <button class="btn btn-secondary" onclick="event.stopPropagation();downloadCisFile(\'' + r.id + '\',\'pdf\')">PDF</button>' +
+    ' <button class="btn btn-secondary" onclick="event.stopPropagation();openCisEditModal(\'' + r.id + '\')">Editar</button>' +
+    ' <button class="btn btn-danger" onclick="event.stopPropagation();openCisDeleteModal(\'' + r.id + '\')">Eliminar</button></div></div>';
+}
+
+function openCisPreview(id) {
+  const r = cisAllData.find((item) => item.id === id);
+  document.getElementById("cisPreviewTitle").textContent = "Vista previa - " + (r && r.nombre_completo ? r.nombre_completo : "CIS");
+  document.getElementById("cisPreviewFrame").src = "/api/cis/preview/" + id;
+  document.getElementById("cisPreviewOverlay").style.display = "flex";
+}
+
+function closeCisPreview(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("cisPreviewFrame").src = "about:blank";
+  document.getElementById("cisPreviewOverlay").style.display = "none";
+}
+
+function downloadCisFile(id, fmt) {
+  window.open("/api/cis/file/" + id + "?format=" + fmt, "_blank");
+}
+
+function exportCisBatch(fmt, scope, btnId) {
+  const btn = document.getElementById(btnId);
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="material-icons">hourglass_top</span> Generando... (puede tardar)';
+  fetch("/api/cis/export?format=" + fmt + "&scope=" + scope)
+    .then((resp) => {
+      if (!resp.ok) throw new Error("Error");
+      const disp = resp.headers.get("Content-Disposition") || "";
+      const m = disp.match(/filename="(.+)"/);
+      return resp.blob().then((blob) => ({ blob, name: m ? m[1] : ("CIS_" + fmt + ".zip") }));
+    })
+    .then(({ blob, name }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    })
+    .catch(() => alert("Ocurrio un error al exportar. Intenta de nuevo."))
+    .finally(() => { btn.disabled = false; btn.innerHTML = orig; });
+}
+
+function toggleCisDetail(idx) {
+  cisExpandedRow = cisExpandedRow === idx ? null : idx;
+  renderCisTable();
+}
+
+async function loadCisStats() {
+  const el = document.getElementById("cisStatsGrid");
+  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  try {
+    const resp = await fetch("/api/cis/stats");
+    if (!resp.ok) throw new Error("Error");
+    const d = await resp.json();
+    const tipos = Object.keys(d.tipos || {}).map((t) => '<div class="stat-card"><span class="material-icons stat-icon">badge</span><div class="stat-info"><span class="stat-value">' + d.tipos[t] + '</span><span class="stat-label">' + t + '</span></div></div>').join("");
+    el.innerHTML =
+      '<div class="stat-card"><span class="material-icons stat-icon">people</span><div class="stat-info"><span class="stat-value">' + d.total + '</span><span class="stat-label">Total clientes</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">check_circle</span><div class="stat-info"><span class="stat-value">' + d.habilitados + '</span><span class="stat-label">Habilitados</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">cancel</span><div class="stat-info"><span class="stat-value">' + d.no_habilitados + '</span><span class="stat-label">No habilitados</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">fingerprint</span><div class="stat-info"><span class="stat-value">' + d.con_documento + '</span><span class="stat-label">Con documento</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value">' + (d.ultima_actualizacion ? formatDate(d.ultima_actualizacion) : "-") + '</span><span class="stat-label">Ultima actualizacion</span></div></div>' +
+      tipos;
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">error</span><p>Error al cargar estadisticas.</p></div>';
+  }
+}
+
+function openCisAddModal() {
+  document.getElementById("cisEditId").value = "";
+  document.getElementById("cisModalTitle").textContent = "Anadir cliente";
+  ["cisFormNombre", "cisFormFirst", "cisFormMiddle", "cisFormLast", "cisFormDob", "cisFormSsn", "cisFormCountryCit", "cisFormLanguages", "cisFormOfficer", "cisFormPasaporte", "cisFormCc", "cisFormPais", "cisFormFechaExp", "cisFormFechaVenc", "cisFormAutoridad", "cisFormDireccion", "cisFormZip", "cisFormCiudad", "cisFormDepartamento", "cisFormUrbanizacion", "cisFormDistrito", "cisFormTelefono", "cisFormCorreo", "cisFormTelegram", "cisFormCantidad"].forEach((id) => document.getElementById(id).value = "");
+  document.getElementById("cisFormTipo").value = "PASAPORTE";
+  document.getElementById("cisFormGender").value = "MALE";
+  document.getElementById("cisFormHabilitado").checked = false;
+  document.getElementById("btnCisModalSubmit").textContent = "Guardar";
+  document.getElementById("cisModalOverlay").style.display = "flex";
+}
+
+function openCisEditModal(id) {
+  const r = cisAllData.find((item) => item.id === id);
+  if (!r) return;
+  document.getElementById("cisEditId").value = id;
+  document.getElementById("cisModalTitle").textContent = "Editar cliente";
+  document.getElementById("cisFormNombre").value = r.nombre_completo || "";
+  document.getElementById("cisFormFirst").value = r.first_name || "";
+  document.getElementById("cisFormMiddle").value = r.middle_name || "";
+  document.getElementById("cisFormLast").value = r.last_name || "";
+  document.getElementById("cisFormGender").value = (r.gender || "MALE").toUpperCase();
+  document.getElementById("cisFormDob").value = r.date_of_birth || "";
+  document.getElementById("cisFormSsn").value = r.ssn || "";
+  document.getElementById("cisFormCountryCit").value = r.country_citizenship || "";
+  document.getElementById("cisFormLanguages").value = r.languages || "";
+  document.getElementById("cisFormOfficer").value = r.officer_name || "";
+  document.getElementById("cisFormTipo").value = (r.tipo_documento || "PASAPORTE").toUpperCase();
+  document.getElementById("cisFormPasaporte").value = r.pasaporte || "";
+  document.getElementById("cisFormCc").value = r.cc || "";
+  document.getElementById("cisFormPais").value = r.pais || "";
+  document.getElementById("cisFormFechaExp").value = r.fecha_expedicion || "";
+  document.getElementById("cisFormFechaVenc").value = r.fecha_vencimiento || "";
+  document.getElementById("cisFormAutoridad").value = r.autoridad_emisora || "";
+  document.getElementById("cisFormDireccion").value = r.street_address || "";
+  document.getElementById("cisFormZip").value = r.codigo_postal || "";
+  document.getElementById("cisFormCiudad").value = r.ciudad || "";
+  document.getElementById("cisFormDepartamento").value = r.departamento || "";
+  document.getElementById("cisFormUrbanizacion").value = r.urbanizacion || "";
+  document.getElementById("cisFormDistrito").value = r.distrito || "";
+  document.getElementById("cisFormTelefono").value = r.telephone || "";
+  document.getElementById("cisFormCorreo").value = r.email || "";
+  document.getElementById("cisFormTelegram").value = r.telegram || "";
+  document.getElementById("cisFormCantidad").value = r.cantidad_participacion || "";
+  document.getElementById("cisFormHabilitado").checked = !!r.habilitado;
+  document.getElementById("btnCisModalSubmit").textContent = "Actualizar";
+  document.getElementById("cisModalOverlay").style.display = "flex";
+}
+
+function closeCisModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("cisModalOverlay").style.display = "none";
+}
+
+function getCisFormData() {
+  return {
+    nombre_completo: document.getElementById("cisFormNombre").value.trim(),
+    first_name: document.getElementById("cisFormFirst").value.trim(),
+    middle_name: document.getElementById("cisFormMiddle").value.trim(),
+    last_name: document.getElementById("cisFormLast").value.trim(),
+    gender: document.getElementById("cisFormGender").value.trim().toUpperCase(),
+    date_of_birth: document.getElementById("cisFormDob").value.trim(),
+    ssn: document.getElementById("cisFormSsn").value.trim(),
+    country_citizenship: document.getElementById("cisFormCountryCit").value.trim(),
+    languages: document.getElementById("cisFormLanguages").value.trim(),
+    officer_name: document.getElementById("cisFormOfficer").value.trim(),
+    tipo_documento: document.getElementById("cisFormTipo").value.trim().toUpperCase(),
+    pasaporte: document.getElementById("cisFormPasaporte").value.trim(),
+    cc: document.getElementById("cisFormCc").value.trim(),
+    pais: document.getElementById("cisFormPais").value.trim(),
+    fecha_expedicion: document.getElementById("cisFormFechaExp").value.trim(),
+    fecha_vencimiento: document.getElementById("cisFormFechaVenc").value.trim(),
+    autoridad_emisora: document.getElementById("cisFormAutoridad").value.trim(),
+    street_address: document.getElementById("cisFormDireccion").value.trim(),
+    codigo_postal: document.getElementById("cisFormZip").value.trim(),
+    ciudad: document.getElementById("cisFormCiudad").value.trim(),
+    departamento: document.getElementById("cisFormDepartamento").value.trim(),
+    urbanizacion: document.getElementById("cisFormUrbanizacion").value.trim(),
+    distrito: document.getElementById("cisFormDistrito").value.trim(),
+    telephone: document.getElementById("cisFormTelefono").value.trim(),
+    email: document.getElementById("cisFormCorreo").value.trim(),
+    telegram: document.getElementById("cisFormTelegram").value.trim(),
+    cantidad_participacion: document.getElementById("cisFormCantidad").value.trim(),
+    habilitado: document.getElementById("cisFormHabilitado").checked,
+  };
+}
+
+async function submitCisForm() {
+  const nombre = document.getElementById("cisFormNombre").value.trim();
+  if (!nombre) {
+    alert("El campo Nombre Completo es obligatorio.");
+    document.getElementById("cisFormNombre").focus();
+    return;
+  }
+
+  const btn = document.getElementById("btnCisModalSubmit");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const editId = document.getElementById("cisEditId").value;
+    const data = getCisFormData();
+    let url, method;
+    if (editId) {
+      url = "/api/cis/edit/" + editId;
+      method = "PUT";
+    } else {
+      url = "/api/cis/add";
+      method = "POST";
+    }
+    const resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.detail || "Error al guardar");
+    }
+    closeCisModal();
+    cisExpandedRow = null;
+    await loadCisRegistros();
+  } catch (err) {
+    alert(err.message || "Ocurrio un error al guardar. Intenta de nuevo.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = document.getElementById("cisEditId").value ? "Actualizar" : "Guardar";
+  }
+}
+
+function openCisDeleteModal(id) {
+  document.getElementById("cisDeleteId").value = id;
+  document.getElementById("cisDeleteOverlay").style.display = "flex";
+}
+
+function closeCisDeleteModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById("cisDeleteOverlay").style.display = "none";
+}
+
+async function executeCisDelete() {
+  const id = document.getElementById("cisDeleteId").value;
+  if (!id) return;
+  const btn = document.querySelector("#cisDeleteModal .btn-danger");
+  btn.disabled = true;
+  btn.textContent = "Eliminando...";
+  try {
+    const resp = await fetch("/api/cis/delete/" + id, { method: "DELETE" });
+    if (!resp.ok) throw new Error("Error al eliminar");
+    closeCisDeleteModal();
+    cisExpandedRow = null;
+    await loadCisRegistros();
   } catch (err) {
     alert("Ocurrio un error al eliminar. Intenta de nuevo.");
   } finally {

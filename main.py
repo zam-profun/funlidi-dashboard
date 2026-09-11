@@ -40,6 +40,9 @@ if os.getenv("PASSWORD_ELIANA"):
 
 _SESSIONS = {}  # token -> {"expiry": float, "username": str}
 
+# Users allowed to access the CIS module (data, preview, export, CRUD).
+CIS_ALLOWED_USERS = {"Angel", "Jeovani"}
+
 def _clean_sessions():
     now = time.time()
     expired = [k for k, v in _SESSIONS.items() if v["expiry"] < now]
@@ -181,6 +184,10 @@ async def session_middleware(request: Request, call_next):
         _clean_sessions()
         if not token or token not in _SESSIONS:
             return JSONResponse(status_code=401, content={"detail": "No autorizado"})
+        if path.startswith("/api/cis/"):
+            username = _SESSIONS[token].get("username")
+            if username not in CIS_ALLOWED_USERS:
+                return JSONResponse(status_code=403, content={"detail": "Sin acceso al modulo CIS"})
     return await call_next(request)
 
 
@@ -1179,6 +1186,363 @@ async def edit_inventario_entry(telegram_user_id: int, data: dict = Body(...)):
 async def delete_inventario_entry(telegram_user_id: int):
     supabase_inventario.table(INVENTARIO_TABLE).delete().eq("telegram_user_id", telegram_user_id).execute()
     return {"success": True}
+
+
+# ========== CIS ENDPOINTS ==========
+
+CIS_TABLE = "clientes_cis"
+
+CIS_FIELDS = [
+    "nombre_completo", "first_name", "middle_name", "last_name",
+    "gender", "date_of_birth", "ssn", "country_citizenship", "languages",
+    "telephone", "email", "tipo_documento", "pasaporte", "cc",
+    "fecha_expedicion", "fecha_vencimiento", "autoridad_emisora",
+    "officer_name", "street_address", "ciudad", "departamento", "pais",
+    "codigo_postal", "urbanizacion", "distrito", "telegram",
+    "cantidad_participacion", "habilitado",
+]
+
+
+@app.get("/api/cis/data")
+async def get_cis_data():
+    result = supabase_inventario.table(CIS_TABLE).select("*").order("nombre_completo").execute()
+    rows = result.data or []
+    return {"data": rows, "total": len(rows)}
+
+
+@app.get("/api/cis/stats")
+async def get_cis_stats():
+    result = supabase_inventario.table(CIS_TABLE).select("*").execute()
+    rows = result.data or []
+    total = len(rows)
+    habilitados = sum(1 for r in rows if r.get("habilitado"))
+    no_habilitados = total - habilitados
+    con_documento = sum(1 for r in rows if (r.get("pasaporte") or r.get("cc")))
+    tipos = {}
+    for r in rows:
+        t = (r.get("tipo_documento") or "SIN_TIPO").upper()
+        tipos[t] = tipos.get(t, 0) + 1
+    ultima = max(
+        (r.get("updated_at") or r.get("created_at") or "") for r in rows
+    ) if rows else None
+    return {
+        "total": total,
+        "habilitados": habilitados,
+        "no_habilitados": no_habilitados,
+        "con_documento": con_documento,
+        "sin_documento": total - con_documento,
+        "tipos": tipos,
+        "ultima_actualizacion": ultima,
+    }
+
+
+@app.get("/api/cis/download")
+async def download_cis_xlsx():
+    result = supabase_inventario.table(CIS_TABLE).select("*").order("nombre_completo").execute()
+    rows = result.data or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CIS"
+
+    headers = [
+        "Nombre Completo", "Tipo Documento", "Pasaporte", "CC",
+        "Primer Nombre", "Segundo Nombre", "Apellidos", "Genero",
+        "Fecha Nacimiento", "SSN", "Pais Residencia", "Idiomas",
+        "Telefono", "Correo", "Fecha Expedicion", "Fecha Vencimiento",
+        "Autoridad Emisora", "Oficial", "Direccion", "Ciudad",
+        "Departamento", "Pais", "Codigo Postal", "Urbanizacion", "Distrito",
+        "Telegram", "Cantidad Participacion", "Habilitado",
+        "Fecha Creacion", "Ultima Actualizacion",
+    ]
+    ws.append(headers)
+
+    for r in rows:
+        ws.append([
+            r.get("nombre_completo") or "-",
+            r.get("tipo_documento") or "-",
+            r.get("pasaporte") or "-",
+            r.get("cc") or "-",
+            r.get("first_name") or "-",
+            r.get("middle_name") or "-",
+            r.get("last_name") or "-",
+            r.get("gender") or "-",
+            r.get("date_of_birth") or "-",
+            r.get("ssn") or "-",
+            r.get("country_citizenship") or "-",
+            r.get("languages") or "-",
+            r.get("telephone") or "-",
+            r.get("email") or "-",
+            r.get("fecha_expedicion") or "-",
+            r.get("fecha_vencimiento") or "-",
+            r.get("autoridad_emisora") or "-",
+            r.get("officer_name") or "-",
+            r.get("street_address") or "-",
+            r.get("ciudad") or "-",
+            r.get("departamento") or "-",
+            r.get("pais") or "-",
+            r.get("codigo_postal") or "-",
+            r.get("urbanizacion") or "-",
+            r.get("distrito") or "-",
+            r.get("telegram") or "-",
+            r.get("cantidad_participacion") or 0,
+            "Si" if r.get("habilitado") else "No",
+            formatear_fecha_simple(r.get("created_at")),
+            formatear_fecha_simple(r.get("updated_at")),
+        ])
+
+    from openpyxl.styles import Font, PatternFill
+    header_fill = PatternFill(start_color="7E57C2", end_color="7E57C2", fill_type="solid")
+    header_font = Font(bold=True, size=11)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            try:
+                val = str(cell.value) if cell.value else ""
+                max_len = max(max_len, len(val))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    hoy = datetime.now(COL_TZ)
+    filename = f"CIS_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _clean_cis_value(v):
+    return str(v).strip() if v is not None and str(v).strip() else None
+
+
+@app.post("/api/cis/add")
+async def add_cis_entry(data: dict = Body(...)):
+    nombre = (data.get("nombre_completo") or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+    row = {}
+    for k in CIS_FIELDS:
+        v = data.get(k)
+        if k == "habilitado":
+            row[k] = bool(v)
+        elif k == "cantidad_participacion":
+            try:
+                row[k] = int(v) if v is not None and str(v).strip() else None
+            except Exception:
+                row[k] = None
+        else:
+            row[k] = _clean_cis_value(v)
+    row["doc_key"] = (row.get("pasaporte") or "").lower() + "|" + (row.get("cc") or "").lower()
+    result = supabase_inventario.table(CIS_TABLE).insert(row).execute()
+    return {"success": True, "data": result.data[0] if result.data else row}
+
+
+@app.put("/api/cis/edit/{record_id}")
+async def edit_cis_entry(record_id: str, data: dict = Body(...)):
+    existing = supabase_inventario.table(CIS_TABLE).select("*").eq("id", record_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    row = {}
+    for k in CIS_FIELDS:
+        if k in data:
+            v = data[k]
+            if k == "habilitado":
+                row[k] = bool(v)
+            elif k == "cantidad_participacion":
+                try:
+                    row[k] = int(v) if v is not None and str(v).strip() else None
+                except Exception:
+                    row[k] = None
+            else:
+                row[k] = _clean_cis_value(v)
+
+    if not row:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    if "pasaporte" in row or "cc" in row:
+        pas = row.get("pasaporte") if "pasaporte" in row else existing.data[0].get("pasaporte")
+        c = row.get("cc") if "cc" in row else existing.data[0].get("cc")
+        row["doc_key"] = (pas or "").lower() + "|" + (c or "").lower()
+
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    supabase_inventario.table(CIS_TABLE).update(row).eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.delete("/api/cis/delete/{record_id}")
+async def delete_cis_entry(record_id: str):
+    supabase_inventario.table(CIS_TABLE).delete().eq("id", record_id).execute()
+    return {"success": True}
+
+
+@app.put("/api/cis/toggle-habilitado/{record_id}")
+async def toggle_cis_habilitado(record_id: str):
+    result = supabase_inventario.table(CIS_TABLE).select("habilitado").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    current = bool(result.data[0].get("habilitado"))
+    supabase_inventario.table(CIS_TABLE).update({
+        "habilitado": not current,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", record_id).execute()
+    return {"success": True, "habilitado": not current}
+
+
+# ========== CIS DOCUMENT GENERATION (preview + export) ==========
+
+SYS_GROUP_DIR = r"C:\Users\amazi\Desktop\mariaelvira\sys-group"
+
+
+def _cis_engine():
+    import sys as _sys
+    if SYS_GROUP_DIR not in _sys.path:
+        _sys.path.insert(0, SYS_GROUP_DIR)
+    import generar_cis
+    import cis_pdf
+    return generar_cis, cis_pdf
+
+
+def _cis_row_or_404(record_id: str):
+    result = supabase_inventario.table(CIS_TABLE).select("*").eq("id", record_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return result.data[0]
+
+
+def _cis_scope_rows(scope: str):
+    q = supabase_inventario.table(CIS_TABLE).select("*")
+    if scope == "habilitados":
+        q = q.eq("habilitado", True)
+    result = q.order("nombre_completo").execute()
+    return result.data or []
+
+
+@app.get("/api/cis/preview/{record_id}")
+async def preview_cis_pdf(record_id: str):
+    """Generate the client's CIS and stream it back as an inline PDF preview."""
+    import tempfile
+    generar_cis, cis_pdf = _cis_engine()
+    row = _cis_row_or_404(record_id)
+    c = generar_cis.row_to_client(row)
+    if not c.get("doc_number"):
+        raise HTTPException(status_code=400, detail="El cliente no tiene documento")
+    with tempfile.TemporaryDirectory() as tmp:
+        docx_path = generar_cis.build_cis_file(c, out_dir=tmp)
+        pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+        cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+        with open(pdf_path, "rb") as f:
+            content = f.read()
+    hoy = datetime.now(COL_TZ)
+    filename = f"CIS_preview_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.pdf"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@app.get("/api/cis/file/{record_id}")
+async def download_cis_file(record_id: str, format: str = "docx"):
+    """Download a single client's CIS as .docx or .pdf."""
+    import tempfile
+    fmt = (format or "docx").lower()
+    if fmt not in ("docx", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato invalido (docx|pdf)")
+    generar_cis, cis_pdf = _cis_engine()
+    row = _cis_row_or_404(record_id)
+    c = generar_cis.row_to_client(row)
+    if not c.get("doc_number"):
+        raise HTTPException(status_code=400, detail="El cliente no tiene documento")
+    with tempfile.TemporaryDirectory() as tmp:
+        docx_path = generar_cis.build_cis_file(c, out_dir=tmp)
+        if fmt == "docx":
+            with open(docx_path, "rb") as f:
+                content = f.read()
+            media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            fname = os.path.basename(docx_path)
+        else:
+            pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+            cis_pdf.convert_docx_to_pdf(docx_path, pdf_path)
+            with open(pdf_path, "rb") as f:
+                content = f.read()
+            media = "application/pdf"
+            fname = os.path.splitext(os.path.basename(docx_path))[0] + ".pdf"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.get("/api/cis/export")
+async def export_cis_batch(format: str = "docx", scope: str = "habilitados"):
+    """Batch-export CIS documents as a .zip (format=docx|pdf, scope=all|habilitados)."""
+    import tempfile
+    import zipfile
+    fmt = (format or "docx").lower()
+    if fmt not in ("docx", "pdf"):
+        raise HTTPException(status_code=400, detail="Formato invalido (docx|pdf)")
+    if scope not in ("all", "habilitados"):
+        raise HTTPException(status_code=400, detail="Scope invalido (all|habilitados)")
+    generar_cis, cis_pdf = _cis_engine()
+    rows = _cis_scope_rows(scope)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No hay registros para exportar")
+
+    buf = io.BytesIO()
+    with tempfile.TemporaryDirectory() as tmp:
+        outdir = os.path.join(tmp, "cis")
+        os.makedirs(outdir, exist_ok=True)
+        paths = []
+        if fmt == "pdf":
+            with cis_pdf.WordBatch() as batch:
+                for row in rows:
+                    try:
+                        c = generar_cis.row_to_client(row)
+                        if not c.get("doc_number"):
+                            continue
+                        docx_path = generar_cis.build_cis_file(c, out_dir=outdir)
+                        pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+                        batch.convert(docx_path, pdf_path)
+                        try:
+                            os.remove(docx_path)
+                        except OSError:
+                            pass
+                        paths.append(pdf_path)
+                    except Exception:
+                        continue
+        else:
+            for row in rows:
+                try:
+                    c = generar_cis.row_to_client(row)
+                    if not c.get("doc_number"):
+                        continue
+                    paths.append(generar_cis.build_cis_file(c, out_dir=outdir))
+                except Exception:
+                    continue
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for p in paths:
+                z.write(p, os.path.basename(p))
+    buf.seek(0)
+    hoy = datetime.now(COL_TZ)
+    filename = f"CIS_{fmt}_{scope}_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ========== MICROLINGOTES ENDPOINTS ==========

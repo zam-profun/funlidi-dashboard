@@ -34,6 +34,18 @@
   --clr-warning: #F57F17;
 }
 
+.theme-cis {
+  --clr-primary: #7E57C2;
+  --clr-primary-rgb: 126, 87, 194;
+  --clr-primary-hover: #673AB7;
+  --clr-primary-dark: #5E35B1;
+  --clr-bg-light: #EDE7F6;
+  --clr-bg-hover: #D1C4E9;
+  --clr-border: #D1C4E9;
+  --clr-header-border: #D1C4E9;
+  --clr-warning: #F57F17;
+}
+
 .theme-microlingotes {
   --clr-primary: #F4B400;
   --clr-primary-rgb: 244, 180, 0;
