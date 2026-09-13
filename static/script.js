@@ -231,47 +231,47 @@ function switchSection(section) {
   document.getElementById("sectionTitle").textContent = titles[section] || "Registros";
 }
 
-function loadSection(section) {
-  if (section === "registros") loadTable();
-  if (section === "estadisticas") { loadStats(); loadActivity(); }
-  if (section === "anomalias") loadAnomalies();
-  if (section === "pagos-resumen") loadPagosResumen();
-  if (section === "pagos-registros") loadPagosRegistros();
-  if (section === "pagos-flayer") loadPagosFlayer();
-  if (section === "pagos-personas") loadPagosPersonas();
-  if (section === "pagos-estadisticas") loadPagosStats();
-  if (section === "ayudas-registros") loadAyudasRegistros();
-  if (section === "ayudas-estadisticas") loadAyudasStats();
-  if (section === "inventario-registros") loadInventarioRegistros();
-  if (section === "inventario-estadisticas") loadInventarioStats();
-  if (section === "inventario-productos") loadInventarioProductos();
-  if (section === "cis-registros") loadCisRegistros();
-  if (section === "cis-estadisticas") loadCisStats();
-  if (section === "lider-registros") loadLiderRegistros();
-  if (section === "lider-estadisticas") loadLiderStats();
-  if (section === "microlingotes-registros") loadMicrolingotesRegistros();
-  if (section === "microlingotes-estadisticas") loadMicrolingotesStats();
-  if (section === "dinares-registros") loadDinaresRegistros();
-  if (section === "dinares-estadisticas") loadDinaresStats();
-  if (section === "contenedores-registros") loadContenedoresRegistros();
-  if (section === "contenedores-estadisticas") loadContenedoresStats();
-  if (section === "consulta-buscar") loadConsulta();
-  if (section === "farley-resumen") loadFarleyResumen();
-  if (section === "farley-miembros") loadFarleyMiembros();
-  if (section === "farley-promociones") loadFarleyPromociones();
-  if (section === "farley-graficos") loadFarleyGraficos();
-  if (section === "farley-detalle") loadFarleyDetalle();
-  if (section === "verificacion-resumen") loadVerificacionResumen();
-  if (section === "verificacion-busqueda") loadVerificacionBusqueda();
-  if (section === "reparticion-registros") loadReparticionRegistros();
-  if (section === "vaquitas-registros") loadVaquitasRegistros();
+function loadSection(section, silent) {
+  if (section === "registros") loadTable(silent);
+  if (section === "estadisticas") { loadStats(silent); loadActivity(silent); }
+  if (section === "anomalias") loadAnomalies(silent);
+  if (section === "pagos-resumen") loadPagosResumen(silent);
+  if (section === "pagos-registros") loadPagosRegistros(silent);
+  if (section === "pagos-flayer") loadPagosFlayer(silent);
+  if (section === "pagos-personas") loadPagosPersonas(silent);
+  if (section === "pagos-estadisticas") loadPagosStats(silent);
+  if (section === "ayudas-registros") loadAyudasRegistros(silent);
+  if (section === "ayudas-estadisticas") loadAyudasStats(silent);
+  if (section === "inventario-registros") loadInventarioRegistros(silent);
+  if (section === "inventario-estadisticas") loadInventarioStats(silent);
+  if (section === "inventario-productos") loadInventarioProductos(silent);
+  if (section === "cis-registros") loadCisRegistros(silent);
+  if (section === "cis-estadisticas") loadCisStats(silent);
+  if (section === "lider-registros") loadLiderRegistros(silent);
+  if (section === "lider-estadisticas") loadLiderStats(silent);
+  if (section === "microlingotes-registros") loadMicrolingotesRegistros(silent);
+  if (section === "microlingotes-estadisticas") loadMicrolingotesStats(silent);
+  if (section === "dinares-registros") loadDinaresRegistros(silent);
+  if (section === "dinares-estadisticas") loadDinaresStats(silent);
+  if (section === "contenedores-registros") loadContenedoresRegistros(silent);
+  if (section === "contenedores-estadisticas") loadContenedoresStats(silent);
+  if (section === "consulta-buscar") loadConsulta(silent);
+  if (section === "farley-resumen") loadFarleyResumen(silent);
+  if (section === "farley-miembros") loadFarleyMiembros(silent);
+  if (section === "farley-promociones") loadFarleyPromociones(silent);
+  if (section === "farley-graficos") loadFarleyGraficos(silent);
+  if (section === "farley-detalle") loadFarleyDetalle(silent);
+  if (section === "verificacion-resumen") loadVerificacionResumen(silent);
+  if (section === "verificacion-busqueda") loadVerificacionBusqueda(silent);
+  if (section === "reparticion-registros") loadReparticionRegistros(silent);
+  if (section === "vaquitas-registros") loadVaquitasRegistros(silent);
 }
 
 function startAutoRefresh() {
   if (refreshInterval) clearInterval(refreshInterval);
   refreshInterval = setInterval(() => {
     const active = document.querySelector(".nav-btn.active");
-    if (active) loadSection(active.dataset.section);
+    if (active) loadSection(active.dataset.section, true);
   }, 60000);
 }
 
@@ -279,7 +279,7 @@ function initRefresh() {
   document.getElementById("btnRefresh").addEventListener("click", () => {
     updateRefreshIndicator(true);
     const active = document.querySelector(".nav-btn.active");
-    if (active) loadSection(active.dataset.section);
+    if (active) loadSection(active.dataset.section, true);
   });
 }
 
@@ -386,9 +386,9 @@ function getFilenameFromResponse(resp) {
   return `Registros_FUNLIDI_${dd}-${mm}-${yyyy}.xlsx`;
 }
 
-async function loadTable() {
+async function loadTable(silent) {
   const tbody = document.getElementById("tableBody");
-  tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>`;
+  if (!silent) tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>`;
 
   try {
     const resp = await fetch("/api/data");
@@ -699,9 +699,9 @@ async function loadPagosResumen() {
   }
 }
 
-async function loadPagosRegistros() {
+async function loadPagosRegistros(silent) {
   const tbody = document.getElementById("pagosTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando registros de pagos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando registros de pagos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/pagos/data");
@@ -803,9 +803,9 @@ async function loadPagosFlayer() {
   }
 }
 
-async function loadPagosPersonas() {
+async function loadPagosPersonas(silent) {
   const tbody = document.getElementById("pagosPersonasBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando personas...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando personas...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/pagos/personas");
@@ -1082,9 +1082,9 @@ function toggleAyudasBenef(rowIdx, benefN) {
   renderAyudasTable();
 }
 
-async function loadAyudasRegistros() {
+async function loadAyudasRegistros(silent) {
   const tbody = document.getElementById("ayudasTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/ayudas/data");
@@ -1173,9 +1173,9 @@ function renderAyudasTable() {
   tbody.innerHTML = html;
 }
 
-async function loadAyudasStats() {
+async function loadAyudasStats(silent) {
   const el = document.getElementById("ayudasStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     const resp = await fetch("/api/ayudas/stats");
@@ -1617,9 +1617,9 @@ async function downloadInventarioProducto(producto) {
   }
 }
 
-async function loadInventarioProductos() {
+async function loadInventarioProductos(silent) {
   const container = document.getElementById("inventarioProductosContainer");
-  container.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando productos...</p></div>';
+  if (!silent) container.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando productos...</p></div>';
 
   try {
     const resp = await fetch("/api/inventario/productos");
@@ -1701,9 +1701,9 @@ function renderInventarioProductos(productos) {
   container.innerHTML = html;
 }
 
-async function loadInventarioRegistros() {
+async function loadInventarioRegistros(silent) {
   const tbody = document.getElementById("inventarioTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/inventario/data");
@@ -1859,9 +1859,9 @@ function renderInventarioTable() {
   tbody.innerHTML = html;
 }
 
-async function loadInventarioStats() {
+async function loadInventarioStats(silent) {
   const el = document.getElementById("inventarioStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     const resp = await fetch("/api/inventario/stats");
@@ -2124,9 +2124,9 @@ function getCisFilename(resp) {
   return "CIS.xlsx";
 }
 
-async function loadCisRegistros() {
+async function loadCisRegistros(silent) {
   const tbody = document.getElementById("cisTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
   try {
     const resp = await fetch("/api/cis/data");
     if (!resp.ok) throw new Error("Error");
@@ -2306,9 +2306,9 @@ function toggleCisDetail(idx) {
   renderCisTable();
 }
 
-async function loadCisStats() {
+async function loadCisStats(silent) {
   const el = document.getElementById("cisStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
   try {
     const resp = await fetch("/api/cis/stats");
     if (!resp.ok) throw new Error("Error");
@@ -2534,9 +2534,9 @@ function getMicrolingotesFilename(resp) {
   return `Microlingotes_Validacion_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
 }
 
-async function loadMicrolingotesRegistros() {
+async function loadMicrolingotesRegistros(silent) {
   const tbody = document.getElementById("microlingotesTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/microlingotes/data");
@@ -2688,9 +2688,9 @@ function renderMicrolingotesTable() {
   tbody.innerHTML = html;
 }
 
-async function loadMicrolingotesStats() {
+async function loadMicrolingotesStats(silent) {
   const el = document.getElementById("microlingotesStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     const resp = await fetch("/api/microlingotes/stats");
@@ -2894,9 +2894,9 @@ function getDinaresFilename(resp) {
   return `Dinares_Validacion_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
 }
 
-async function loadDinaresRegistros() {
+async function loadDinaresRegistros(silent) {
   const tbody = document.getElementById("dinaresTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/dinares/data");
@@ -3048,9 +3048,9 @@ function renderDinaresTable() {
   tbody.innerHTML = html;
 }
 
-async function loadDinaresStats() {
+async function loadDinaresStats(silent) {
   const el = document.getElementById("dinaresStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     const resp = await fetch("/api/dinares/stats");
@@ -3254,9 +3254,9 @@ function getContenedoresFilename(resp) {
   return `Contenedores_Validacion_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
 }
 
-async function loadContenedoresRegistros() {
+async function loadContenedoresRegistros(silent) {
   const tbody = document.getElementById("contenedoresTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/contenedores/data");
@@ -3408,9 +3408,9 @@ function renderContenedoresTable() {
   tbody.innerHTML = html;
 }
 
-async function loadContenedoresStats() {
+async function loadContenedoresStats(silent) {
   const el = document.getElementById("contenedoresStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     const resp = await fetch("/api/contenedores/stats");
@@ -3613,9 +3613,9 @@ function getReparticionFilename(resp) {
   return `Reparticion_Vaquita_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
 }
 
-async function loadReparticionRegistros() {
+async function loadReparticionRegistros(silent) {
   const tbody = document.getElementById("reparticionTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="10"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/reparticion/data");
@@ -4045,7 +4045,7 @@ function getVaquitasFilename(resp, mod) {
   return `Vaquitas_${mod}_${String(hoy.getDate()).padStart(2,"0")}-${String(hoy.getMonth()+1).padStart(2,"0")}-${hoy.getFullYear()}.xlsx`;
 }
 
-async function loadVaquitasRegistros() {
+async function loadVaquitasRegistros(silent) {
   const mod = getVaquitasCurrentMod();
   vaquitasCurrentMod = mod;
   const cfg = VAQUITAS_MODS[mod];
@@ -4054,7 +4054,7 @@ async function loadVaquitasRegistros() {
   renderVaquitasHeaders(cfg);
 
   const tbody = document.getElementById("vaquitasTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cfg.headers.length + '"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cfg.headers.length + '"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
 
   try {
     const resp = await fetch("/api/vaquitas/" + mod + "/data");
@@ -4361,19 +4361,21 @@ function initConsultaSearch() {
   });
 }
 
-async function loadConsulta() {
+async function loadConsulta(silent) {
   const q = document.getElementById("consultaSearchInput").value.trim();
   const resultsEl = document.getElementById("consultaResults");
   const hintEl = document.getElementById("consultaHint");
 
   if (q.length < 2) {
-    hintEl.innerHTML = '<span class="material-icons consulta-hint-icon">info</span><span>Ingresa al menos 2 caracteres para buscar.</span>';
-    resultsEl.innerHTML = "";
+    if (!silent) {
+      hintEl.innerHTML = '<span class="material-icons consulta-hint-icon">info</span><span>Ingresa al menos 2 caracteres para buscar.</span>';
+      resultsEl.innerHTML = "";
+    }
     return;
   }
 
   hintEl.style.display = "none";
-  resultsEl.innerHTML = '<div class="consulta-loading"><span class="material-icons consulta-loading-icon">hourglass_top</span>Buscando en todos los modulos...</div>';
+  if (!silent) resultsEl.innerHTML = '<div class="consulta-loading"><span class="material-icons consulta-loading-icon">hourglass_top</span>Buscando en todos los modulos...</div>';
 
   try {
     const resp = await fetch("/api/consulta?q=" + encodeURIComponent(q));
@@ -4590,9 +4592,9 @@ async function _ensureCrmData() {
 
 // ========== RESUMEN ==========
 
-async function loadFarleyResumen() {
+async function loadFarleyResumen(silent) {
   const el = document.getElementById("farleyResumenContent");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando resumen...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando resumen...</p></div>';
   await _ensureCrmData();
   const s = crmData.summary;
   const m = crmData.members;
@@ -4630,9 +4632,9 @@ async function loadFarleyResumen() {
 
 // ========== MIEMBROS ==========
 
-async function loadFarleyMiembros() {
+async function loadFarleyMiembros(silent) {
   const tbody = document.getElementById("farleyTableBody");
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando miembros...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando miembros...</p></div></td></tr>';
 
   await _ensureCrmData();
   const search = document.getElementById("farleySearchInput").value.toLowerCase();
@@ -4694,9 +4696,9 @@ function farleySortKey(k) {
 
 // ========== PROMOCIONES ==========
 
-async function loadFarleyPromociones() {
+async function loadFarleyPromociones(silent) {
   const el = document.getElementById("farleyPromocionesContent");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando promociones...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando promociones...</p></div>';
   await _ensureCrmData();
 
   const flayers = crmData.summary.flayers;
@@ -4808,9 +4810,9 @@ function farleyToggleGroup(headerEl) {
 
 // ========== GRÁFICOS ==========
 
-async function loadFarleyGraficos() {
+async function loadFarleyGraficos(silent) {
   const el = document.getElementById("farleyGraficosContent");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando gráficos...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando gráficos...</p></div>';
   await _ensureCrmData();
 
   const s = crmData.summary;
@@ -5073,9 +5075,9 @@ function initVerificacionSearch() {
 }
 
 
-async function loadVerificacionResumen() {
+async function loadVerificacionResumen(silent) {
   var el = document.getElementById("verificacionStatsGrid");
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
 
   try {
     var resp = await fetch("/api/verificacion");
@@ -5100,7 +5102,8 @@ async function loadVerificacionResumen() {
 }
 
 
-function loadVerificacionBusqueda() {
+function loadVerificacionBusqueda(silent) {
+  if (silent) return;
   document.getElementById("verifResults").innerHTML = "";
   document.getElementById("verifTableCount").textContent = "";
 }
@@ -5271,10 +5274,10 @@ function initLiderDownload() {
   });
 }
 
-async function loadLiderRegistros() {
+async function loadLiderRegistros(silent) {
   const tbody = document.getElementById("liderTableBody");
   if (!tbody) return;
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
+  if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando datos...</p></div></td></tr>';
   try {
     const resp = await fetch("/api/lider/data");
     if (!resp.ok) throw new Error("Error");
@@ -5509,10 +5512,10 @@ function renderLiderTable() {
   tbody.innerHTML = html;
 }
 
-async function loadLiderStats() {
+async function loadLiderStats(silent) {
   const el = document.getElementById("liderStatsGrid");
   if (!el) return;
-  el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
+  if (!silent) el.innerHTML = '<div class="empty-state"><span class="material-icons empty-icon">inbox</span><p>Cargando estadisticas...</p></div>';
   try {
     const resp = await fetch("/api/lider/stats");
     if (!resp.ok) throw new Error("Error");
