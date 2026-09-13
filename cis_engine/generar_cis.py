@@ -17,7 +17,7 @@ from datetime import datetime
 from fill_cis import (
     TEMPLATE_PATH, FRAME_W_IN, FRAME_H_IN, BLUE,
     split_name, fmt_date, is_us, gender_word,
-    fill_label, fill_label_rebuilt, replace_in_text, insert_image_into_frame, fill_header,
+    fill_label, fill_label_tabbed, apply_hanging_to_label, replace_in_text, insert_image_into_frame, fill_header,
     normalize_image,
 )
 from docx import Document
@@ -34,10 +34,19 @@ TEMPLATE_PATH = os.path.join(BASE_DIR, "TEMPLATES", "MODELO CIS.docx")
 # measured value columns are page-absolute, hence the -44pt correction:
 # page 1 value at 132.4pt -> (132.4-44)/72 = 1.2278in;
 # page 4 value at 136.4pt -> (136.4-44)/72 = 1.2833in.
-P1_STREET_SEP_SPACES = 8
-P1_STREET_HANGING_IN = 1.2278
-P4_ADDRESS_SEP_SPACES = 8
-P4_ADDRESS_HANGING_IN = 1.2833
+# Page-1 officer block: native `Label\t: value` rows. The tab snaps to the
+# hanging-indent position, so with hanging H the ": " of every row lands at
+# H + left margin, exactly like the sibling rows above (": " at ~297.5pt),
+# and wrapped lines align under it. Verified from rendered PDFs.
+P1_OFFICER_HANGING_IN = 3.5278
+# First lines keep the native label offset (~49.7pt = 5.7pt past the margin).
+P1_OFFICER_HANG_IN = 3.4472
+# Page-4 block: `Label:` + single tab + value. The tab snaps to the hanging
+# position, so every value lands at 44 + 253.5 = 297.5pt (the page-1 grid)
+# and wrapped lines align under it. First lines keep the native label offset
+# (~100.7pt): hanging = 253.5 - 56.7 = 196.8pt. Measured from rendered PDFs.
+P4_LEFT_IN = 3.5208
+P4_HANG_IN = 2.7333
 
 
 def load_clients_from_supabase():
@@ -161,31 +170,38 @@ def _person_folders():
     return _FOLDERS_CACHE
 
 
-def find_image(c):
+def find_image(c, report=None):
     """Resolve the image path for a client.
 
     Primary: ID IMAGES/CARPETAS/<FULL NAME>/<PASAPORTE|CEDULA>.* — the folder
     name identifies the person, the file name the document kind.
     Fallback: legacy flat files named by document number in ID IMAGES/.
+    Records carpeta_faltante / archivo_faltante anomalies when report given.
     """
+    want = "PASAPORTE" if c.get("doc_type") == "PASAPORTE" else "CEDULA"
     folders = _person_folders()
     folder = folders.get(_norm_folder_name(c.get("full")))
-    if folder:
-        want = "PASAPORTE" if c.get("doc_type") == "PASAPORTE" else "CEDULA"
+    if folder is not None:
         for f in sorted(os.listdir(folder)):
             base, fe = os.path.splitext(f)
             if base.strip().upper() == want and fe.lower() in (".png", ".jpg", ".jpeg", ".jfif"):
                 return os.path.join(folder, f)
     # legacy fallback: flat file named by document number
-    if not os.path.isdir(IMG_DIR):
-        return None
-    for ext in ("png", "PNG", "jfif", "JFIF", "jpg", "jpeg"):
-        for f in os.listdir(IMG_DIR):
-            if not os.path.isfile(os.path.join(IMG_DIR, f)):
-                continue
-            base, fe = os.path.splitext(f)
-            if base.strip() == str(c["doc_number"]).strip() and fe.lower() == "." + ext.lower():
-                return os.path.join(IMG_DIR, f)
+    if os.path.isdir(IMG_DIR):
+        for ext in ("png", "PNG", "jfif", "JFIF", "jpg", "jpeg"):
+            for f in os.listdir(IMG_DIR):
+                if not os.path.isfile(os.path.join(IMG_DIR, f)):
+                    continue
+                base, fe = os.path.splitext(f)
+                if base.strip() == str(c["doc_number"]).strip() and fe.lower() == "." + ext.lower():
+                    return os.path.join(IMG_DIR, f)
+    if report is not None:
+        if folder is None:
+            report.add(c.get("full"), c.get("doc_number"), "carpeta_faltante",
+                       f"sin carpeta ID IMAGES/CARPETAS/{c.get('full')}")
+        else:
+            report.add(c.get("full"), c.get("doc_number"), "archivo_faltante",
+                       f"falta {want}.* en ID IMAGES/CARPETAS/{os.path.basename(folder)}")
     return None
 
 
@@ -195,34 +211,115 @@ def safe_filename(s):
     return "_".join(s.split())
 
 
-def fill_document(c, image_path, out_path, template_path=None, skip_image=False):
+# --------------------------------------------------------------------------
+# Anomaly report: collects per-client problems during a batch run so main()
+# can print one grouped list at the end instead of failing silently.
+# Kinds: sin_documento | carpeta_faltante | archivo_faltante | foto_fallida |
+#         etiqueta_faltante | encabezado_faltante | fallido
+# --------------------------------------------------------------------------
+
+class AnomalyReport:
+    KIND_LABELS = {
+        "sin_documento": "saltados (sin documento)",
+        "carpeta_faltante": "sin foto (sin carpeta en ID IMAGES/CARPETAS)",
+        "archivo_faltante": "sin foto (carpeta existe, falta el archivo PASAPORTE/CEDULA)",
+        "foto_fallida": "foto no insertada (error al normalizar/insertar)",
+        "etiqueta_faltante": "etiqueta no encontrada en la plantilla",
+        "encabezado_faltante": "encabezado no rellenado",
+        "fallido": "fallidos (sin documento generado)",
+    }
+    KIND_ORDER = ["fallido", "sin_documento", "carpeta_faltante",
+                  "archivo_faltante", "foto_fallida", "etiqueta_faltante",
+                  "encabezado_faltante"]
+
+    def __init__(self):
+        self.items = []
+
+    def add(self, cliente, documento, tipo, detalle=""):
+        self.items.append({
+            "cliente": str(cliente or "-"),
+            "documento": str(documento or "-"),
+            "tipo": tipo,
+            "detalle": str(detalle or ""),
+        })
+
+    def count(self, tipo):
+        return sum(1 for i in self.items if i["tipo"] == tipo)
+
+    def total(self):
+        return len(self.items)
+
+    def print(self, total, ok):
+        photo_kinds = ("carpeta_faltante", "archivo_faltante", "foto_fallida")
+        failed = self.count("fallido") + self.count("sin_documento")
+        print("")
+        if not self.items:
+            print(f"Generados OK: {ok}/{total} (sin anomalias)")
+            return
+        print(f"============ ANOMALIAS ({self.total()}) ============")
+        for kind in self.KIND_ORDER:
+            rows = [i for i in self.items if i["tipo"] == kind]
+            if not rows:
+                continue
+            print(f"[{kind}] ({len(rows)}): {self.KIND_LABELS.get(kind, kind)}")
+            for r in rows:
+                extra = f" | {r['detalle']}" if r["detalle"] else ""
+                print(f"  - {r['cliente']} | doc {r['documento']}{extra}")
+        no_photo = sum(self.count(k) for k in photo_kinds)
+        print(f"Generados OK: {ok}/{total} (con foto: {ok - no_photo}, sin foto: {no_photo}, fallidos: {failed})")
+
+
+def _fill_checked(doc, report, c, label, value, tabbed=None):
+    """fill_label / fill_label_tabbed wrapper that records etiqueta_faltante.
+
+    tabbed = (left_inches, hanging_inches) for tab-snapped rows, else plain fill.
+    """
+    if tabbed is None:
+        ok = fill_label(doc, label, value)
+    else:
+        ok = fill_label_tabbed(doc, label, value, tabbed[0], tabbed[1])
+    if not ok and report is not None:
+        report.add(c.get("full"), c.get("doc_number"), "etiqueta_faltante",
+                   f"etiqueta '{label}' no encontrada en la plantilla")
+    return ok
+
+
+def fill_document(c, image_path, out_path, template_path=None, skip_image=False, report=None):
     doc = Document(template_path or TEMPLATE_PATH)
+    fl = lambda label, value, tabbed=None: _fill_checked(
+        doc, report, c, label, value, tabbed=tabbed)
 
     # --- Body identity ---
-    fill_label(doc, "First Name", c["first"])
-    fill_label(doc, "Middle Name", c["middle"])
-    fill_label(doc, "Last Name", c["last"])
-    fill_label(doc, "Gender", c["gender"])
-    fill_label(doc, "Date of Birth", c["dob"])
-    fill_label(doc, "Social Security Number", c["ssn"])
-    fill_label(doc, "Country of Citizenship", c["country"])
-    fill_label(doc, "Languages", c["languages"])
-    fill_label(doc, "Telephone", c["telephone"])
-    fill_label(doc, "E-mail", c["email"])
+    fl("First Name", c["first"])
+    fl("Middle Name", c["middle"])
+    fl("Last Name", c["last"])
+    fl("Gender", c["gender"])
+    fl("Date of Birth", c["dob"])
+    fl("Social Security Number", c["ssn"])
+    fl("Country of Citizenship", c["country"])
+    fl("Languages", c["languages"])
+    fl("Telephone", c["telephone"])
+    fl("E-mail", c["email"])
 
     # --- Passport / document information ---
-    fill_label(doc, "Passport", c["doc_number"])
-    fill_label(doc, "Date of Issue", c["fecha_exp"])
-    fill_label(doc, "Date of Expiry", c["fecha_venc"])
-    fill_label(doc, "Issuing Authority", c["autoridad"])
+    fl("Passport", c["doc_number"])
+    fl("Date of Issue", c["fecha_exp"])
+    fl("Date of Expiry", c["fecha_venc"])
+    fl("Issuing Authority", c["autoridad"])
 
-    # --- Address (page 1) ---
-    fill_label(doc, "Full Name of Officer", c["officer"])
-    fill_label_rebuilt(doc, "Street Address", c["street"], P1_STREET_SEP_SPACES, P1_STREET_HANGING_IN)
-    fill_label(doc, "City", c["city"])
-    fill_label(doc, "State", c["state"])
-    fill_label(doc, "Country", c["country"])
-    fill_label(doc, "Postal Code", c["zip"])
+    # --- Officer address block (page 1) ---
+    # Native `Label\t: value` structure (same grid rhythm as the rows above:
+    # the tab snaps to the hanging-indent position, so values land with the
+    # sibling rows and wrapped lines align under them).
+    fl("Full Name of Officer", c["officer"])
+    fl("Street Address", c["street"])
+    fl("City", c["city"])
+    fl("State", c["state"])
+    fl("Country", c["country"])
+    fl("Postal Code", c["zip"])
+    for _lbl in ("Full Name of Officer", "Street Address", "City", "State",
+                 "Country", "Postal Code"):
+        apply_hanging_to_label(doc, _lbl, P1_OFFICER_HANGING_IN, P1_OFFICER_HANG_IN)
 
     # --- Declaration (page 2) : names + date in blue ---
     today = c["today"]
@@ -236,47 +333,57 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False)
     # Name / Title (blue) is handled by the (NAME OF PERSON) replacement above.
 
     # --- Page 4 address block ---
-    fill_label_rebuilt(doc, "ADDRESS:", c["street"], P4_ADDRESS_SEP_SPACES, P4_ADDRESS_HANGING_IN)
-    fill_label(doc, "ZIP CODE", c["zip"])
-    fill_label(doc, "URBANIZATION", c["urbanizacion"])
-    fill_label(doc, "DISTRICT", c["distrito"])
-    fill_label(doc, "CITY", c["city"])
-    fill_label(doc, "STATE", c["state"])
-    fill_label(doc, "COUNTRY", c["country"])
+    # All rows rebuilt uniformly so values share one column (per-field spacing
+    # compensates for different label lengths) and wrapped lines align under it.
+    p4 = (P4_LEFT_IN, P4_HANG_IN)
+    fl("ADDRESS:", c["street"], tabbed=p4)
+    fl("ZIP CODE", c["zip"], tabbed=p4)
+    fl("DISTRICT", c["distrito"], tabbed=p4)
+    fl("CITY", c["city"], tabbed=p4)
+    fl("STATE", c["state"], tabbed=p4)
+    fl("COUNTRY", c["country"], tabbed=p4)
 
     # --- Header (every page) ---
-    fill_header(doc, {
+    header_filled = fill_header(doc, {
         "header_name": c["full"],
         "header_country": f"{c['doc_number']} / {c['country']}",
         "header_address": c["street"],
         "header_telephone": c["telephone"],
         "header_email": c["email"],
     })
+    if not header_filled and report is not None:
+        report.add(c.get("full"), c.get("doc_number"), "encabezado_faltante",
+                   "no se rellenó ningún campo del encabezado")
 
     # --- Image (normalized to the fixed frame) ---
     if not skip_image:
         if image_path:
-            import tempfile
-            with tempfile.TemporaryDirectory() as tmp:
-                norm = os.path.join(tmp, "normalized.png")
-                normalize_image(image_path, norm)
-                insert_image_into_frame(doc, norm, 74)
-        else:
-            print(f"  WARNING: no image found for document number {c['doc_number']}", file=sys.stderr)
+            try:
+                import tempfile
+                with tempfile.TemporaryDirectory() as tmp:
+                    norm = os.path.join(tmp, "normalized.png")
+                    normalize_image(image_path, norm)
+                    placed = insert_image_into_frame(doc, norm, 74)
+                if not placed and report is not None:
+                    report.add(c.get("full"), c.get("doc_number"), "foto_fallida",
+                               "marco de imagen no encontrado en la plantilla")
+            except Exception as e:
+                if report is not None:
+                    report.add(c.get("full"), c.get("doc_number"), "foto_fallida", str(e)[:160])
 
     doc.save(out_path)
     return out_path
 
 
-def build_cis_file(c, out_dir=OUT_DIR, template_path=None, skip_image=False):
+def build_cis_file(c, out_dir=OUT_DIR, template_path=None, skip_image=False, report=None):
     """Generate a single client's CIS document and return the output path."""
     if not c["doc_number"]:
         raise ValueError(f"no document number for {c['full']}")
-    img = None if skip_image else find_image(c)
+    img = None if skip_image else find_image(c, report=report)
     os.makedirs(out_dir, exist_ok=True)
     fname = safe_filename(f"{c['full']}_{c['doc_type']}_{c['doc_number']}") + ".docx"
     out = os.path.join(out_dir, fname)
-    fill_document(c, img, out, template_path=template_path, skip_image=skip_image)
+    fill_document(c, img, out, template_path=template_path, skip_image=skip_image, report=report)
     return out
 
 
@@ -303,14 +410,21 @@ def main():
     elif not args.all and not args.limit:
         clients = clients[:1]  # default: just the first, for quick runs
 
+    report = AnomalyReport()
     print(f"Generating {len(clients)} CIS document(s)...")
+    ok = 0
     for c in clients:
         if not c["doc_number"]:
-            print(f"  SKIP: no document number for {c['full']}")
+            report.add(c.get("full"), "", "sin_documento", "sin pasaporte ni CC utilizable")
             continue
-        out = build_cis_file(c)
-        print(f"  OK: {os.path.basename(out)}")
+        try:
+            out = build_cis_file(c, report=report)
+            print(f"  OK: {os.path.basename(out)}")
+            ok += 1
+        except Exception as e:
+            report.add(c.get("full"), c.get("doc_number"), "fallido", str(e)[:160])
 
+    report.print(total=len(clients), ok=ok)
     print("Done.")
 
 

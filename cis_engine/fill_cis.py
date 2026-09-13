@@ -183,36 +183,43 @@ def paragraph_label(p):
     return text.strip()
 
 
-def set_hanging_indent(p, inches):
-    """Set a hanging indent so wrapped lines start at `inches` from the margin.
+def set_hanging_indent(p, left_inches, hanging_inches=None):
+    """Set a hanging indent (inches, margin-relative).
 
-    First line stays at 0 (label), continuation lines align at `inches`
-    (where the value starts).
+    Wrapped lines start at `left_inches`; the first line starts at
+    `left_inches - hanging_inches`. With hanging omitted, the first line
+    stays at 0 (margin).
     """
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
+    if hanging_inches is None:
+        hanging_inches = left_inches
     pPr = p._p.get_or_add_pPr()
     ind = pPr.find(qn("w:ind"))
     if ind is None:
         ind = OxmlElement("w:ind")
         pPr.append(ind)
-    twips = str(int(round(inches * 1440)))
-    ind.set(qn("w:left"), twips)
-    ind.set(qn("w:hanging"), twips)
+    ind.set(qn("w:left"), str(int(round(left_inches * 1440))))
+    ind.set(qn("w:hanging"), str(int(round(hanging_inches * 1440))))
 
 
-def fill_label_rebuilt(doc, label_text, value, sep_spaces, hanging_inches, color=None):
-    """Rebuild a label paragraph as `Label:<spaces><value>` with hanging indent.
+def apply_hanging_to_label(doc, label_text, left_inches, hanging_inches=None):
+    """Set hanging indent on every paragraph whose label equals `label_text`."""
+    n = 0
+    for p in doc.paragraphs:
+        if paragraph_label(p) == label_text.strip():
+            set_hanging_indent(p, left_inches, hanging_inches)
+            n += 1
+    return n
 
-    Tabs are deliberately avoided: tab stops shift with paragraph indentation,
-    which would move the value column away from the hanging position. Fixed
-    spaces give a value column that is identical for every client, so wrapped
-    lines always align under the value start.
+
+def fill_label_tabbed(doc, label_text, value, left_inches, hanging_inches, color=None):
+    """Rebuild a label paragraph as `Label:` + single tab + value, with hanging
+    indent. The tab snaps to the hanging-indent position, so the value lands on
+    the same column for every row and wrapped lines align under it.
     """
-    import re
     value = str(value if value is not None else "")
     target = label_text.strip()
-    sep = " " * int(sep_spaces)
     matched = False
     for p in doc.paragraphs:
         if paragraph_label(p) == target:
@@ -220,12 +227,16 @@ def fill_label_rebuilt(doc, label_text, value, sep_spaces, hanging_inches, color
             clean_label = target.rstrip(":") + ":"
             for r in list(p.runs):
                 r._element.getparent().remove(r._element)
-            run = p.add_run(clean_label + sep + value)
+            lbl_run = p.add_run(clean_label)
+            tab_run = p.add_run("\t")
+            val_run = p.add_run(value)
             if src is not None:
-                _clone_props(src, run)
+                _clone_props(src, lbl_run)
+                _clone_props(src, tab_run)
+                _clone_props(src, val_run)
             if color is not None:
-                _set_run_color(run, color)
-            set_hanging_indent(p, hanging_inches)
+                _set_run_color(val_run, color)
+            set_hanging_indent(p, left_inches, hanging_inches)
             matched = True
     return matched
 
