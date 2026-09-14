@@ -18,7 +18,7 @@ from fill_cis import (
     TEMPLATE_PATH, FRAME_W_IN, FRAME_H_IN, BLUE,
     split_name, fmt_date, is_us, gender_word,
     fill_label, fill_label_tabbed, apply_hanging_to_label, replace_in_text, insert_image_into_frame, fill_header,
-    normalize_image,
+    normalize_image, build_header_lines, fit_header_box,
 )
 from docx import Document
 
@@ -103,7 +103,20 @@ def row_to_client(r):
         return default
 
     nombre = str(g("nombre_completo", "NOMBRE COMPLETO", "full_name") or "").strip()
-    first, middle, last = split_name(nombre)
+    split_first, split_middle, split_last = split_name(nombre)
+
+    def _name(*keys, fallback=""):
+        for k in keys:
+            v = r.get(k)
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        return fallback
+
+    # Stored split fields win (dashboard-editable edge cases); otherwise the
+    # positional split of nombre_completo applies.
+    first = _name("first_name", fallback=split_first)
+    middle = _name("middle_name", fallback=split_middle)
+    last = _name("last_name", fallback=split_last)
 
     def _doc(v):
         s = str(v or "").strip()
@@ -117,6 +130,11 @@ def row_to_client(r):
         tipo = "PASAPORTE" if pasaporte else ("ID" if cc else "PASAPORTE")
     doc_number = pasaporte if tipo == "PASAPORTE" else cc
     pais = str(g("pais", "PAIS") or "").strip().upper()
+    # Legal + residence countries: stored columns win, plain pais is fallback.
+    _pl = str(g("pais_legal") or "").strip().upper()
+    _pr = str(g("pais_residencia") or "").strip().upper()
+    pais_legal = _pl or pais
+    pais_residencia = _pr or pais
 
     return {
         "first": first,
@@ -125,9 +143,12 @@ def row_to_client(r):
         "full": nombre,
         "gender": gender_word(str(g("genero", "GENERO", "gender") or "")),
         "dob": fmt_date(g("fecha_nacimiento", "FECHA DE NACIMIENTO", "date_of_birth")),
-        "ssn": "N/A",
-        "country": pais,
-        "languages": "SPANISH",
+        "ssn": _name("ssn", fallback="N/A"),
+        "country": pais_legal,
+        "pais_legal": pais_legal,
+        "pais_residencia": pais_residencia,
+        "address_country": pais_residencia,
+        "languages": _name("languages", fallback="SPANISH"),
         "telephone": str(g("telefono", "INDICATIVO MAS CELULAR", "telephone") or "N/A"),
         "email": str(g("correo", "CORREO", "email") or "N/A"),
         "doc_number": doc_number,
@@ -135,13 +156,13 @@ def row_to_client(r):
         "fecha_exp": fmt_date(g("fecha_expedicion", "FECHA DE EXPEDICION")),
         "fecha_venc": fmt_date(g("fecha_vencimiento", "FECHA DE VENCIMIENTO")),
         "autoridad": str(g("autoridad_emisora", "AUTORIDAD EMISORA") or "N/A"),
-        "officer": nombre,
+        "officer": _name("officer_name", fallback=nombre),
         "street": str(g("direccion", "DIRECCION", "street_address") or "N/A"),
         "city": str(g("ciudad", "CUIDAD") or "N/A"),
         "state": str(g("departamento", "DEPARTAMENTO") or "N/A"),
         "zip": str(g("codigo_postal", "CODIGO POSTAL") or "N/A"),
-        "urbanizacion": "N/A",
-        "distrito": "N/A",
+        "urbanizacion": _name("urbanizacion", fallback="N/A"),
+        "distrito": _name("distrito", fallback="N/A"),
         "us": is_us(pais),
         "today": datetime.now().strftime("%d/%m/%Y"),
     }
@@ -315,7 +336,7 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False,
     fl("Street Address", c["street"])
     fl("City", c["city"])
     fl("State", c["state"])
-    fl("Country", c["country"])
+    fl("Country", c["address_country"])
     fl("Postal Code", c["zip"])
     for _lbl in ("Full Name of Officer", "Street Address", "City", "State",
                  "Country", "Postal Code"):
@@ -341,19 +362,32 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False,
     fl("DISTRICT", c["distrito"], tabbed=p4)
     fl("CITY", c["city"], tabbed=p4)
     fl("STATE", c["state"], tabbed=p4)
-    fl("COUNTRY", c["country"], tabbed=p4)
+    fl("COUNTRY", c["address_country"], tabbed=p4)
 
     # --- Header (every page) ---
+    # Name / PASSPORT line / Address(+Postal) / telephone / e-mail. Address
+    # parts are comma-joined with missing skipped; Postal Code shares the line
+    # or drops below depending on length (full address lives on pages 1/4).
+    header_lines = build_header_lines(
+        c["doc_number"], c["pais_legal"], c["street"],
+        c["city"], c["state"], c["zip"],
+        c["pais_residencia"],
+    )
     header_filled = fill_header(doc, {
         "header_name": c["full"],
-        "header_country": f"{c['doc_number']} / {c['country']}",
-        "header_address": c["street"],
+        "header_country": header_lines["country_line"],
+        "header_address": header_lines["address_parts"],
+        "header_postal": header_lines["postal_text"],
+        "header_postal_newline": header_lines["postal_newline"],
         "header_telephone": c["telephone"],
         "header_email": c["email"],
     })
     if not header_filled and report is not None:
         report.add(c.get("full"), c.get("doc_number"), "encabezado_faltante",
                    "no se rellenó ningún campo del encabezado")
+    # Grow the header box when the address block needs extra lines so nothing
+    # is pushed out of view (transparent shape behind text; body layout kept).
+    fit_header_box(doc, header_lines["address_lines"])
 
     # --- Image (normalized to the fixed frame) ---
     if not skip_image:

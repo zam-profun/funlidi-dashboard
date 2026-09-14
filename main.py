@@ -41,7 +41,7 @@ if os.getenv("PASSWORD_ELIANA"):
 _SESSIONS = {}  # token -> {"expiry": float, "username": str}
 
 # Users allowed to access the CIS module (data, preview, export, CRUD).
-CIS_ALLOWED_USERS = {"Angel", "Jeovani"}
+CIS_ALLOWED_USERS = {"Angel", "Jeovani", "Eliana"}
 
 def _clean_sessions():
     now = time.time()
@@ -1198,6 +1198,7 @@ CIS_FIELDS = [
     "telephone", "email", "tipo_documento", "pasaporte", "cc",
     "fecha_expedicion", "fecha_vencimiento", "autoridad_emisora",
     "officer_name", "street_address", "ciudad", "departamento", "pais",
+    "pais_legal", "pais_residencia",
     "codigo_postal", "urbanizacion", "distrito", "telegram",
     "cantidad_participacion", "habilitado",
 ]
@@ -1248,10 +1249,11 @@ async def download_cis_xlsx():
     headers = [
         "Nombre Completo", "Tipo Documento", "Pasaporte", "CC",
         "Primer Nombre", "Segundo Nombre", "Apellidos", "Genero",
-        "Fecha Nacimiento", "SSN", "Pais Residencia", "Idiomas",
+        "Fecha Nacimiento", "SSN", "Pais Ciudadania", "Idiomas",
         "Telefono", "Correo", "Fecha Expedicion", "Fecha Vencimiento",
         "Autoridad Emisora", "Oficial", "Direccion", "Ciudad",
-        "Departamento", "Pais", "Codigo Postal", "Urbanizacion", "Distrito",
+        "Departamento", "Pais", "Pais Legal", "Pais Residencia",
+        "Codigo Postal", "Urbanizacion", "Distrito",
         "Telegram", "Cantidad Participacion", "Habilitado",
         "Fecha Creacion", "Ultima Actualizacion",
     ]
@@ -1281,6 +1283,8 @@ async def download_cis_xlsx():
             r.get("ciudad") or "-",
             r.get("departamento") or "-",
             r.get("pais") or "-",
+            r.get("pais_legal") or "-",
+            r.get("pais_residencia") or "-",
             r.get("codigo_postal") or "-",
             r.get("urbanizacion") or "-",
             r.get("distrito") or "-",

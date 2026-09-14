@@ -4,7 +4,7 @@ let lastRefreshTime = null;
 let currentModule = "bot";
 
 // Users allowed to see and use the CIS module. Server enforces this too.
-const CIS_ALLOWED_USERS = ["Angel", "Jeovani"];
+const CIS_ALLOWED_USERS = ["Angel", "Jeovani", "Eliana"];
 
 function cisAccessAllowed() {
   const name = (document.getElementById("userNameDisplay").textContent || "").trim();
@@ -2326,10 +2326,37 @@ async function loadCisStats(silent) {
   }
 }
 
+function splitCisNombre(full) {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return ["", "", ""];
+  if (parts.length === 1) return [parts[0], "", ""];
+  if (parts.length === 2) return [parts[0], "", parts[1]];
+  if (parts.length === 3) return [parts[0], parts[1], parts[2]];
+  return [parts[0], parts[1], parts.slice(2).join(" ")];
+}
+
+function syncCisNombreFields() {
+  const full = document.getElementById("cisFormNombre").value.trim();
+  if (!full) return;
+  const [first, middle, last] = splitCisNombre(full);
+  document.getElementById("cisFormFirst").value = first;
+  document.getElementById("cisFormMiddle").value = middle;
+  document.getElementById("cisFormLast").value = last;
+  document.getElementById("cisFormOfficer").value = full;
+}
+
+function bindCisNombreSyncOnce() {
+  const input = document.getElementById("cisFormNombre");
+  if (input.dataset.syncBound) return;
+  input.dataset.syncBound = "1";
+  input.addEventListener("change", syncCisNombreFields);
+}
+
 function openCisAddModal() {
+  bindCisNombreSyncOnce();
   document.getElementById("cisEditId").value = "";
   document.getElementById("cisModalTitle").textContent = "Anadir cliente";
-  ["cisFormNombre", "cisFormFirst", "cisFormMiddle", "cisFormLast", "cisFormDob", "cisFormSsn", "cisFormCountryCit", "cisFormLanguages", "cisFormOfficer", "cisFormPasaporte", "cisFormCc", "cisFormPais", "cisFormFechaExp", "cisFormFechaVenc", "cisFormAutoridad", "cisFormDireccion", "cisFormZip", "cisFormCiudad", "cisFormDepartamento", "cisFormUrbanizacion", "cisFormDistrito", "cisFormTelefono", "cisFormCorreo", "cisFormTelegram", "cisFormCantidad"].forEach((id) => document.getElementById(id).value = "");
+  ["cisFormNombre", "cisFormFirst", "cisFormMiddle", "cisFormLast", "cisFormDob", "cisFormSsn", "cisFormCountryCit", "cisFormLanguages", "cisFormOfficer", "cisFormPasaporte", "cisFormCc", "cisFormPais", "cisFormPaisLegal", "cisFormPaisResidencia", "cisFormFechaExp", "cisFormFechaVenc", "cisFormAutoridad", "cisFormDireccion", "cisFormZip", "cisFormCiudad", "cisFormDepartamento", "cisFormUrbanizacion", "cisFormDistrito", "cisFormTelefono", "cisFormCorreo", "cisFormTelegram", "cisFormCantidad"].forEach((id) => document.getElementById(id).value = "");
   document.getElementById("cisFormTipo").value = "PASAPORTE";
   document.getElementById("cisFormGender").value = "MALE";
   document.getElementById("cisFormHabilitado").checked = false;
@@ -2340,6 +2367,7 @@ function openCisAddModal() {
 function openCisEditModal(id) {
   const r = cisAllData.find((item) => item.id === id);
   if (!r) return;
+  bindCisNombreSyncOnce();
   document.getElementById("cisEditId").value = id;
   document.getElementById("cisModalTitle").textContent = "Editar cliente";
   document.getElementById("cisFormNombre").value = r.nombre_completo || "";
@@ -2356,6 +2384,8 @@ function openCisEditModal(id) {
   document.getElementById("cisFormPasaporte").value = r.pasaporte || "";
   document.getElementById("cisFormCc").value = r.cc || "";
   document.getElementById("cisFormPais").value = r.pais || "";
+  document.getElementById("cisFormPaisLegal").value = r.pais_legal || "";
+  document.getElementById("cisFormPaisResidencia").value = r.pais_residencia || "";
   document.getElementById("cisFormFechaExp").value = r.fecha_expedicion || "";
   document.getElementById("cisFormFechaVenc").value = r.fecha_vencimiento || "";
   document.getElementById("cisFormAutoridad").value = r.autoridad_emisora || "";
@@ -2395,6 +2425,8 @@ function getCisFormData() {
     pasaporte: document.getElementById("cisFormPasaporte").value.trim(),
     cc: document.getElementById("cisFormCc").value.trim(),
     pais: document.getElementById("cisFormPais").value.trim(),
+    pais_legal: document.getElementById("cisFormPaisLegal").value.trim(),
+    pais_residencia: document.getElementById("cisFormPaisResidencia").value.trim(),
     fecha_expedicion: document.getElementById("cisFormFechaExp").value.trim(),
     fecha_vencimiento: document.getElementById("cisFormFechaVenc").value.trim(),
     autoridad_emisora: document.getElementById("cisFormAutoridad").value.trim(),

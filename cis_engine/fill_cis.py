@@ -75,6 +75,60 @@ def fmt_date(value, default="N/A"):
     return s
 
 
+# Header composition tuning.
+HEADER_POSTAL_SAME_LINE_MAX = 70  # joined address parts at/below this keep postal on the same line
+HEADER_PARTS_HARD_MAX = 150  # sanity cap only; real addresses stay far below
+HEADER_LINE_CHARS = 66  # measured chars per visual header line (16pt bold centered)
+HEADER_LINE_PT = 16  # vertical budget per header line
+
+_MISSING_PARTS = ("", "N/A", "NA", "NAN", "-", "0", "NONE", "NO", "NULL")
+
+
+def _present_part(v):
+    s = str(v or "").strip()
+    return s if s and s.upper() not in _MISSING_PARTS else ""
+
+
+def build_header_lines(doc_number, legal_country, street, city, state, zip_code,
+                       address_country):
+    """Compose the header's passport and address lines.
+
+    - Passport line: " / "-joined present values among [doc_number,
+      legal_country] (pais_legal: USA for Puerto Ricans etc. as stored data).
+    - Address parts: comma-joined present values among [street, city, state,
+      address_country] (Barrio rides inside the street value; pais_residencia).
+    - Postal: "Postal Code: X" on the same line (space-separated) when the
+      joined parts are at/below HEADER_POSTAL_SAME_LINE_MAX, else on a new
+      line. Skipped entirely when zip is missing.
+    Returns dict(country_line, address_parts, postal_text, postal_newline).
+    """
+    country_line = " / ".join([p for p in (
+        _present_part(doc_number), _present_part(legal_country)) if p])
+    parts_list = [_present_part(v) for v in (street, city, state, address_country)]
+    parts_list = [p for p in parts_list if p]
+    full_parts = ", ".join(parts_list)
+    # No display truncation: long addresses wrap and the header box grows to
+    # fit (fit_header_box). Sanity cap only against pathological input.
+    if len(full_parts) > HEADER_PARTS_HARD_MAX:
+        full_parts = full_parts[: HEADER_PARTS_HARD_MAX - 1].rstrip() + "…"
+    zip_clean = _present_part(zip_code)
+    postal_text = f"Postal Code: {zip_clean}" if zip_clean else ""
+    postal_newline = bool(postal_text) and len(full_parts) > HEADER_POSTAL_SAME_LINE_MAX
+    # Visual lines used by the address block (for box sizing).
+    if postal_newline:
+        addr_lines = max(1, -(-len(full_parts) // HEADER_LINE_CHARS)) + 1
+    else:
+        addr_lines = max(1, -(-(len(full_parts) + 1 + len(postal_text)) // HEADER_LINE_CHARS)) \
+            if postal_text else max(1, -(-len(full_parts) // HEADER_LINE_CHARS))
+    return {
+        "country_line": country_line,
+        "address_parts": full_parts,
+        "postal_text": postal_text,
+        "postal_newline": postal_newline,
+        "address_lines": addr_lines,
+    }
+
+
 def is_us(pais):
     p = (pais or "").upper().strip()
     return p in ("ESTADOS UNIDOS", "ESTADOS UNIDOS DE AMERICA", "USA", "US", "UNITED STATES", "EEUU", "EE.UU.")
@@ -326,6 +380,68 @@ def fill_header(doc, data):
     return filled
 
 
+def fit_header_box(doc, address_lines):
+    """Grow the header text box so a multi-line address never pushes content out.
+
+    The stock box fits ~5 lines (name, passport, 1-line address, tel, email).
+    Every extra address line adds HEADER_LINE_PT below; the shape is transparent
+    and behind text, and body layout is driven by section margins, so growing
+    is visually safe. Updates both wp:extent and a:ext on every header drawing.
+    """
+    from docx.oxml.ns import qn
+    extra = max(0, int(address_lines) - 1)
+    if extra <= 0:
+        return False
+    grown = False
+    section = doc.sections[0]
+    header = section.header
+    for para in header.paragraphs:
+        for drawing in para._p.iter(qn("w:drawing")):
+            for ext in list(drawing.iter(qn("wp:extent"))):
+                try:
+                    cx = int(ext.get("cx"))
+                    cy = int(ext.get("cy"))
+                except (TypeError, ValueError):
+                    continue
+                ext.set("cy", str(cy + extra * HEADER_LINE_PT * 12700))
+                grown = True
+            for a_ext in drawing.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}ext"):
+                try:
+                    acx = int(a_ext.get("cx"))
+                    acy = int(a_ext.get("cy"))
+                except (TypeError, ValueError):
+                    continue
+                a_ext.set("cy", str(acy + extra * HEADER_LINE_PT * 12700))
+                grown = True
+    return grown
+
+
+def _insert_run_after(p_el, ref_r_el, text, rPr_src=None, break_first=False):
+    """Insert a new run with `text` right after `ref_r_el` inside paragraph `p_el`,
+    cloning formatting from `rPr_src`. Optionally starts with a line break."""
+    import copy
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    kids = list(p_el)
+    pos = kids.index(ref_r_el) + 1 if ref_r_el in kids else len(kids)
+    if break_first:
+        br_run = OxmlElement("w:r")
+        if rPr_src is not None:
+            br_run.append(copy.deepcopy(rPr_src))
+        br_run.append(OxmlElement("w:br"))
+        p_el.insert(pos, br_run)
+        pos += 1
+    nr = OxmlElement("w:r")
+    if rPr_src is not None:
+        nr.append(copy.deepcopy(rPr_src))
+    t_el = OxmlElement("w:t")
+    t_el.set(qn("xml:space"), "preserve")
+    t_el.text = text
+    nr.append(t_el)
+    p_el.insert(pos, nr)
+    return nr
+
+
 def _walk_replace_in_shapes(paragraph, data, filled):
     """Recursively walk a paragraph's w:drawing text boxes and replace header placeholders."""
     from docx.oxml.ns import qn
@@ -336,6 +452,8 @@ def _walk_replace_in_shapes(paragraph, data, filled):
         ("Number", data.get("header_telephone", "")),
         ("Address", data.get("header_email", "")),
     ]
+    postal_text = data.get("header_postal", "")
+    postal_newline = bool(data.get("header_postal_newline"))
     # Exact token match per w:t so the 'Address: ' label is never clobbered.
     for t in paragraph._p.iter(qn("w:t")):
         text = t.text or ""
@@ -349,3 +467,15 @@ def _walk_replace_in_shapes(paragraph, data, filled):
         if new_text != text:
             t.text = new_text
             filled.append(t)
+            if text == "Full Address" and postal_text:
+                # Append "Postal Code: X" to the address paragraph: same line
+                # (space-separated) or a new line, keeping the token's formatting.
+                # NOTE: the token run lives in a nested txbxContent paragraph,
+                # so insert relative to its real parent, not the outer paragraph.
+                run_el = t.getparent()
+                inner_p = run_el.getparent()
+                rPr = run_el.find(qn("w:rPr"))
+                prefix = "" if postal_newline else " "
+                _insert_run_after(inner_p, run_el, prefix + postal_text,
+                                  rPr_src=rPr, break_first=postal_newline)
+                filled.append(t)
