@@ -365,9 +365,8 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False,
     fl("COUNTRY", c["address_country"], tabbed=p4)
 
     # --- Header (every page) ---
-    # Name / PASSPORT line / Address(+Postal) / telephone / e-mail. Address
-    # parts are comma-joined with missing skipped; Postal Code shares the line
-    # or drops below depending on length (full address lives on pages 1/4).
+    # Name / PASSPORT line / balanced address lines (+Postal as final segment)
+    # / telephone / e-mail. Breaks fall only between segments, never mid-label.
     header_lines = build_header_lines(
         c["doc_number"], c["pais_legal"], c["street"],
         c["city"], c["state"], c["zip"],
@@ -376,9 +375,7 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False,
     header_filled = fill_header(doc, {
         "header_name": c["full"],
         "header_country": header_lines["country_line"],
-        "header_address": header_lines["address_parts"],
-        "header_postal": header_lines["postal_text"],
-        "header_postal_newline": header_lines["postal_newline"],
+        "header_address_lines": header_lines["address_lines"],
         "header_telephone": c["telephone"],
         "header_email": c["email"],
     })
@@ -387,7 +384,7 @@ def fill_document(c, image_path, out_path, template_path=None, skip_image=False,
                    "no se rellenó ningún campo del encabezado")
     # Grow the header box when the address block needs extra lines so nothing
     # is pushed out of view (transparent shape behind text; body layout kept).
-    fit_header_box(doc, header_lines["address_lines"])
+    fit_header_box(doc, header_lines["address_line_count"])
 
     # --- Image (normalized to the fixed frame) ---
     if not skip_image:
@@ -421,16 +418,16 @@ def build_cis_file(c, out_dir=OUT_DIR, template_path=None, skip_image=False, rep
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--local", action="store_true", help="use the Excel instead of Supabase")
-    ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--all", action="store_true")
-    args = ap.parse_args()
+def run_batch(local=False, limit=0, all_=False, out_dir=None):
+    """Generate a batch of CIS documents. Returns (ok_count, report).
 
-    os.makedirs(OUT_DIR, exist_ok=True)
+    Split out so embedders (e.g. the GUI console) can run it on a thread;
+    the CLI path in main() behaves exactly as before.
+    """
+    out_dir = out_dir or OUT_DIR
+    os.makedirs(out_dir, exist_ok=True)
 
-    if args.local:
+    if local:
         excel = os.path.join(BASE_DIR, "DATABASE", "DATOS FINALES (REGALO SOPRESA EXPRESS).xlsx")
         if not os.path.exists(excel):
             excel = os.path.join(BASE_DIR, "DATABASE", "BASE DE DATOS CIS.xlsx")
@@ -439,9 +436,9 @@ def main():
         rows = load_clients_from_supabase()
 
     clients = [row_to_client(r) for r in rows]
-    if not args.all and args.limit:
-        clients = clients[: args.limit]
-    elif not args.all and not args.limit:
+    if not all_ and limit:
+        clients = clients[:limit]
+    elif not all_ and not limit:
         clients = clients[:1]  # default: just the first, for quick runs
 
     report = AnomalyReport()
@@ -452,7 +449,7 @@ def main():
             report.add(c.get("full"), "", "sin_documento", "sin pasaporte ni CC utilizable")
             continue
         try:
-            out = build_cis_file(c, report=report)
+            out = build_cis_file(c, out_dir=out_dir, report=report)
             print(f"  OK: {os.path.basename(out)}")
             ok += 1
         except Exception as e:
@@ -460,6 +457,17 @@ def main():
 
     report.print(total=len(clients), ok=ok)
     print("Done.")
+    return ok, report
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--local", action="store_true", help="use the Excel instead of Supabase")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--all", action="store_true")
+    args = ap.parse_args()
+
+    run_batch(local=args.local, limit=args.limit, all_=args.all)
 
 
 if __name__ == "__main__":

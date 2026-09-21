@@ -76,10 +76,10 @@ def fmt_date(value, default="N/A"):
 
 
 # Header composition tuning.
-HEADER_POSTAL_SAME_LINE_MAX = 70  # joined address parts at/below this keep postal on the same line
 HEADER_PARTS_HARD_MAX = 150  # sanity cap only; real addresses stay far below
 HEADER_LINE_CHARS = 66  # measured chars per visual header line (16pt bold centered)
 HEADER_LINE_PT = 16  # vertical budget per header line
+HEADER_ADDR_LINE_MAX = 60  # packed address lines stay below this (margin under capacity)
 
 _MISSING_PARTS = ("", "N/A", "NA", "NAN", "-", "0", "NONE", "NO", "NULL")
 
@@ -89,43 +89,77 @@ def _present_part(v):
     return s if s and s.upper() not in _MISSING_PARTS else ""
 
 
+def _clean_part(v):
+    """Normalize an address part: collapse whitespace, fix space-before-comma."""
+    s = _present_part(v)
+    if not s:
+        return ""
+    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r" +,", ",", s)
+    return s.strip()
+
+
 def build_header_lines(doc_number, legal_country, street, city, state, zip_code,
                        address_country):
     """Compose the header's passport and address lines.
 
     - Passport line: " / "-joined present values among [doc_number,
       legal_country] (pais_legal: USA for Puerto Ricans etc. as stored data).
-    - Address parts: comma-joined present values among [street, city, state,
-      address_country] (Barrio rides inside the street value; pais_residencia).
-    - Postal: "Postal Code: X" on the same line (space-separated) when the
-      joined parts are at/below HEADER_POSTAL_SAME_LINE_MAX, else on a new
-      line. Skipped entirely when zip is missing.
-    Returns dict(country_line, address_parts, postal_text, postal_newline).
+    - Address block: cleaned segments (street fragments, city, state, address
+      country; Barrio rides inside the street value) plus "Postal Code: X" as
+      the final segment, greedily packed into balanced lines of at most
+      HEADER_ADDR_LINE_MAX chars. Every non-final line ends with a comma, so
+      breaks only ever fall between segments — labels never split and no
+      lonely stumps appear.
+    Returns dict(country_line, address_lines=[line1, line2, ...]).
     """
     country_line = " / ".join([p for p in (
         _present_part(doc_number), _present_part(legal_country)) if p])
-    parts_list = [_present_part(v) for v in (street, city, state, address_country)]
+    parts_list = [_clean_part(v) for v in (street, city, state, address_country)]
     parts_list = [p for p in parts_list if p]
-    full_parts = ", ".join(parts_list)
-    # No display truncation: long addresses wrap and the header box grows to
-    # fit (fit_header_box). Sanity cap only against pathological input.
-    if len(full_parts) > HEADER_PARTS_HARD_MAX:
-        full_parts = full_parts[: HEADER_PARTS_HARD_MAX - 1].rstrip() + "…"
+    # Expand comma-separated segments (the street often already holds
+    # barrio/street/city fragments) so consecutive duplicates collapse across
+    # boundaries too ("A, GUATEMALA, GUATEMALA, B" -> "A, GUATEMALA, B").
+    segments = []
+    for p in parts_list:
+        segments.extend([s.strip() for s in p.split(",") if s.strip()])
+    deduped = []
+    for p in segments:
+        if not deduped or deduped[-1].upper() != p.upper():
+            deduped.append(p)
     zip_clean = _present_part(zip_code)
-    postal_text = f"Postal Code: {zip_clean}" if zip_clean else ""
-    postal_newline = bool(postal_text) and len(full_parts) > HEADER_POSTAL_SAME_LINE_MAX
-    # Visual lines used by the address block (for box sizing).
-    if postal_newline:
-        addr_lines = max(1, -(-len(full_parts) // HEADER_LINE_CHARS)) + 1
-    else:
-        addr_lines = max(1, -(-(len(full_parts) + 1 + len(postal_text)) // HEADER_LINE_CHARS)) \
-            if postal_text else max(1, -(-len(full_parts) // HEADER_LINE_CHARS))
+    if zip_clean:
+        deduped.append(f"Postal Code: {zip_clean}")
+    # Sanity cap only against pathological input (never engages in practice).
+    joined = ", ".join(deduped)
+    if len(joined) > HEADER_PARTS_HARD_MAX:
+        joined = joined[: HEADER_PARTS_HARD_MAX - 1].rstrip() + "…"
+        deduped = [s.strip() for s in joined.split(",") if s.strip()]
+    # Greedy pack: every non-final line ends with "," and stays within budget,
+    # so Word never needs to re-wrap mid-label on its own.
+    lines = []
+    current = ""
+    for seg in deduped:
+        candidate = seg if not current else current + ", " + seg
+        # +1 reserves room for the trailing comma on non-final lines.
+        if current and len(candidate) + 1 > HEADER_ADDR_LINE_MAX:
+            lines.append(current + ",")
+            current = seg
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if not lines:
+        lines = [""]
+    # Box budget: one visual line per packed line, plus natural wrap for any
+    # single over-long segment without commas to break on.
+    addr_count = 0
+    for ln in lines:
+        addr_count += max(1, -(-len(ln) // HEADER_LINE_CHARS))
     return {
         "country_line": country_line,
-        "address_parts": full_parts,
-        "postal_text": postal_text,
-        "postal_newline": postal_newline,
-        "address_lines": addr_lines,
+        "address_lines": lines,
+        "address_line_count": addr_count,
     }
 
 
@@ -445,15 +479,16 @@ def _insert_run_after(p_el, ref_r_el, text, rPr_src=None, break_first=False):
 def _walk_replace_in_shapes(paragraph, data, filled):
     """Recursively walk a paragraph's w:drawing text boxes and replace header placeholders."""
     from docx.oxml.ns import qn
+    addr_lines = data.get("header_address_lines") or []
+    addr_first = addr_lines[0] if addr_lines else data.get("header_address", "")
     mapping = [
         ("Name of the Person", data.get("header_name", "")),
         ("Number / Country of Issue", data.get("header_country", "")),
-        ("Full Address", data.get("header_address", "")),
+        ("Full Address", addr_first),
         ("Number", data.get("header_telephone", "")),
         ("Address", data.get("header_email", "")),
     ]
-    postal_text = data.get("header_postal", "")
-    postal_newline = bool(data.get("header_postal_newline"))
+    addr_rest = addr_lines[1:] if len(addr_lines) > 1 else []
     # Exact token match per w:t so the 'Address: ' label is never clobbered.
     for t in paragraph._p.iter(qn("w:t")):
         text = t.text or ""
@@ -467,15 +502,17 @@ def _walk_replace_in_shapes(paragraph, data, filled):
         if new_text != text:
             t.text = new_text
             filled.append(t)
-            if text == "Full Address" and postal_text:
-                # Append "Postal Code: X" to the address paragraph: same line
-                # (space-separated) or a new line, keeping the token's formatting.
-                # NOTE: the token run lives in a nested txbxContent paragraph,
-                # so insert relative to its real parent, not the outer paragraph.
+            if text == "Full Address" and addr_rest:
+                # Remaining address lines each start on a fresh line, keeping
+                # the token run's formatting. NOTE: the token run lives in a
+                # nested txbxContent paragraph, so insert relative to its real
+                # parent, not the outer paragraph.
                 run_el = t.getparent()
                 inner_p = run_el.getparent()
                 rPr = run_el.find(qn("w:rPr"))
-                prefix = "" if postal_newline else " "
-                _insert_run_after(inner_p, run_el, prefix + postal_text,
-                                  rPr_src=rPr, break_first=postal_newline)
+                anchor = run_el
+                for ln in addr_rest:
+                    # _insert_run_after returns the new w:r: chain after it.
+                    anchor = _insert_run_after(inner_p, anchor, ln,
+                                               rPr_src=rPr, break_first=True)
                 filled.append(t)

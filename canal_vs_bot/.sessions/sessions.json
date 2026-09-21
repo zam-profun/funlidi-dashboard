@@ -1,0 +1,18 @@
+{
+ "sessions": [
+  {
+   "name": "inventario",
+   "phone": "+573162357057",
+   "path": "inventario_session",
+   "builtin": true
+  },
+  {
+   "name": "tg_573206546071",
+   "phone": "+573206546071",
+   "path": "canal_vs_bot\\.sessions\\tg_573206546071",
+   "builtin": false,
+   "username": "jeortosa"
+  }
+ ],
+ "default": "tg_573206546071"
+}

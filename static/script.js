@@ -2319,6 +2319,8 @@ async function loadCisStats(silent) {
       '<div class="stat-card"><span class="material-icons stat-icon">check_circle</span><div class="stat-info"><span class="stat-value">' + d.habilitados + '</span><span class="stat-label">Habilitados</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">cancel</span><div class="stat-info"><span class="stat-value">' + d.no_habilitados + '</span><span class="stat-label">No habilitados</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">fingerprint</span><div class="stat-info"><span class="stat-value">' + d.con_documento + '</span><span class="stat-label">Con documento</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">paid</span><div class="stat-info"><span class="stat-value">' + (d.aporte_anticipo_fmt || "0/0") + '</span><span class="stat-label">Aporte/Anticipo</span></div></div>' +
+      '<div class="stat-card"><span class="material-icons stat-icon">upgrade</span><div class="stat-info"><span class="stat-value">' + (d.personas_mejoradas || 0) + '</span><span class="stat-label">Personas mejoradas</span></div></div>' +
       '<div class="stat-card"><span class="material-icons stat-icon">schedule</span><div class="stat-info"><span class="stat-value">' + (d.ultima_actualizacion ? formatDate(d.ultima_actualizacion) : "-") + '</span><span class="stat-label">Ultima actualizacion</span></div></div>' +
       tipos;
   } catch (err) {
@@ -2356,7 +2358,7 @@ function openCisAddModal() {
   bindCisNombreSyncOnce();
   document.getElementById("cisEditId").value = "";
   document.getElementById("cisModalTitle").textContent = "Anadir cliente";
-  ["cisFormNombre", "cisFormFirst", "cisFormMiddle", "cisFormLast", "cisFormDob", "cisFormSsn", "cisFormCountryCit", "cisFormLanguages", "cisFormOfficer", "cisFormPasaporte", "cisFormCc", "cisFormPais", "cisFormPaisLegal", "cisFormPaisResidencia", "cisFormFechaExp", "cisFormFechaVenc", "cisFormAutoridad", "cisFormDireccion", "cisFormZip", "cisFormCiudad", "cisFormDepartamento", "cisFormUrbanizacion", "cisFormDistrito", "cisFormTelefono", "cisFormCorreo", "cisFormTelegram", "cisFormCantidad"].forEach((id) => document.getElementById(id).value = "");
+  ["cisFormNombre", "cisFormFirst", "cisFormMiddle", "cisFormLast", "cisFormDob", "cisFormSsn", "cisFormCountryCit", "cisFormLanguages", "cisFormOfficer", "cisFormPasaporte", "cisFormCc", "cisFormPais", "cisFormPaisLegal", "cisFormPaisResidencia", "cisFormFechaExp", "cisFormFechaVenc", "cisFormAutoridad", "cisFormDireccion", "cisFormZip", "cisFormCiudad", "cisFormDepartamento", "cisFormUrbanizacion", "cisFormDistrito", "cisFormTelefono", "cisFormCorreo", "cisFormTelegram", "cisFormCantidad", "cisFormCantidadNuevas"].forEach((id) => document.getElementById(id).value = "");
   document.getElementById("cisFormTipo").value = "PASAPORTE";
   document.getElementById("cisFormGender").value = "MALE";
   document.getElementById("cisFormHabilitado").checked = false;
@@ -2399,6 +2401,7 @@ function openCisEditModal(id) {
   document.getElementById("cisFormCorreo").value = r.email || "";
   document.getElementById("cisFormTelegram").value = r.telegram || "";
   document.getElementById("cisFormCantidad").value = r.cantidad_participacion || "";
+  document.getElementById("cisFormCantidadNuevas").value = r.cantidad_participaciones_nuevas || "";
   document.getElementById("cisFormHabilitado").checked = !!r.habilitado;
   document.getElementById("btnCisModalSubmit").textContent = "Actualizar";
   document.getElementById("cisModalOverlay").style.display = "flex";
@@ -2440,6 +2443,7 @@ function getCisFormData() {
     email: document.getElementById("cisFormCorreo").value.trim(),
     telegram: document.getElementById("cisFormTelegram").value.trim(),
     cantidad_participacion: document.getElementById("cisFormCantidad").value.trim(),
+    cantidad_participaciones_nuevas: document.getElementById("cisFormCantidadNuevas").value.trim(),
     habilitado: document.getElementById("cisFormHabilitado").checked,
   };
 }

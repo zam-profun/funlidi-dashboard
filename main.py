@@ -1200,7 +1200,7 @@ CIS_FIELDS = [
     "officer_name", "street_address", "ciudad", "departamento", "pais",
     "pais_legal", "pais_residencia",
     "codigo_postal", "urbanizacion", "distrito", "telegram",
-    "cantidad_participacion", "habilitado",
+    "cantidad_participacion", "cantidad_participaciones_nuevas", "habilitado",
 ]
 
 
@@ -1209,6 +1209,38 @@ async def get_cis_data():
     result = supabase_inventario.table(CIS_TABLE).select("*").order("nombre_completo").execute()
     rows = result.data or []
     return {"data": rows, "total": len(rows)}
+
+
+# ========== CIS: Aporte / Anticipo ==========
+# Participacion normal: 10.000 / 1.000.000 (aditivo).
+# Si la persona tiene >= 1 participacion NUEVA, TODAS sus participaciones
+# (normales + nuevas, cada una cuenta 1) pasan a valer 20.000 / 3.000.000.
+APORTE_NORMAL = 10000
+ANTICIPO_NORMAL = 1000000
+APORTE_MEJORADO = 20000
+ANTICIPO_MEJORADO = 3000000
+
+
+def _num_coax(v):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return 0
+    return max(n, 0)
+
+
+def aporte_anticipo(normales, nuevas):
+    """Retorna (aporte, anticipo, mejorada) para una persona."""
+    n = _num_coax(normales)
+    m = _num_coax(nuevas)
+    if m >= 1:
+        t = n + m
+        return t * APORTE_MEJORADO, t * ANTICIPO_MEJORADO, True
+    return n * APORTE_NORMAL, n * ANTICIPO_NORMAL, False
+
+
+def _fmt_miles(v):
+    return f"{int(v):,}".replace(",", ".")
 
 
 @app.get("/api/cis/stats")
@@ -1223,6 +1255,16 @@ async def get_cis_stats():
     for r in rows:
         t = (r.get("tipo_documento") or "SIN_TIPO").upper()
         tipos[t] = tipos.get(t, 0) + 1
+    total_aporte = 0
+    total_anticipo = 0
+    personas_mejoradas = 0
+    for r in rows:
+        ap, an, mej = aporte_anticipo(r.get("cantidad_participacion"),
+                                      r.get("cantidad_participaciones_nuevas"))
+        total_aporte += ap
+        total_anticipo += an
+        if mej:
+            personas_mejoradas += 1
     ultima = max(
         (r.get("updated_at") or r.get("created_at") or "") for r in rows
     ) if rows else None
@@ -1233,6 +1275,12 @@ async def get_cis_stats():
         "con_documento": con_documento,
         "sin_documento": total - con_documento,
         "tipos": tipos,
+        "total_aporte": total_aporte,
+        "total_anticipo": total_anticipo,
+        "total_aporte_fmt": _fmt_miles(total_aporte),
+        "total_anticipo_fmt": _fmt_miles(total_anticipo),
+        "aporte_anticipo_fmt": "%s/%s" % (_fmt_miles(total_aporte), _fmt_miles(total_anticipo)),
+        "personas_mejoradas": personas_mejoradas,
         "ultima_actualizacion": ultima,
     }
 
@@ -1345,6 +1393,12 @@ async def add_cis_entry(data: dict = Body(...)):
                 row[k] = int(v) if v is not None and str(v).strip() else None
             except Exception:
                 row[k] = None
+        elif k == "cantidad_participaciones_nuevas":
+            try:
+                n = int(v) if v is not None and str(v).strip() else 0
+                row[k] = max(n, 0)
+            except Exception:
+                row[k] = 0
         else:
             row[k] = _clean_cis_value(v)
     row["doc_key"] = (row.get("pasaporte") or "").lower() + "|" + (row.get("cc") or "").lower()
@@ -1369,6 +1423,12 @@ async def edit_cis_entry(record_id: str, data: dict = Body(...)):
                     row[k] = int(v) if v is not None and str(v).strip() else None
                 except Exception:
                     row[k] = None
+            elif k == "cantidad_participaciones_nuevas":
+                try:
+                    n = int(v) if v is not None and str(v).strip() else 0
+                    row[k] = max(n, 0)
+                except Exception:
+                    row[k] = 0
             else:
                 row[k] = _clean_cis_value(v)
 
