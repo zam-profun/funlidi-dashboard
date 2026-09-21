@@ -510,6 +510,12 @@ body {
   color: #2E7D32;
 }
 
+.estado-mejorada {
+  background: #FFF8E1;
+  color: #F57F17;
+  margin-left: 6px;
+}
+
 .estado-incompleto {
   background: var(--clr-bg-light);
   color: var(--clr-warning);

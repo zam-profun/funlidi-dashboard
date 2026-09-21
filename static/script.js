@@ -2144,6 +2144,25 @@ function cisDocNumber(r) {
   return r.pasaporte || r.cc || "-";
 }
 
+function fmtMiles(v) {
+  return String(Math.trunc(Number(v) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function cisAporteAnticipo(r) {
+  // Replica de aporte_anticipo() en main.py — mantener ambas sincronizadas.
+  // Normal: 10.000/1.000.000 c/u. Con >=1 nueva: TODAS pasan a 20.000/3.000.000.
+  const n = Math.max(parseInt(r.cantidad_participacion) || 0, 0);
+  const m = Math.max(parseInt(r.cantidad_participaciones_nuevas) || 0, 0);
+  let ap, an, mej;
+  if (m >= 1) {
+    const t = n + m;
+    ap = t * 20000; an = t * 3000000; mej = true;
+  } else {
+    ap = n * 10000; an = n * 1000000; mej = false;
+  }
+  return { texto: fmtMiles(ap) + "/" + fmtMiles(an), mejorada: mej, normales: n, nuevas: m };
+}
+
 function cisHabilitadoBadge(r) {
   if (r.habilitado) return '<span class="estado-badge estado-completo">Habilitado</span>';
   return '<span class="estado-badge estado-incompleto">No habilitado</span>';
@@ -2192,7 +2211,7 @@ function renderCisTable() {
     const isExpanded = cisExpandedRow === i;
 
     html += '<tr class="ayudas-row" onclick="toggleCisDetail(' + i + ')"><td class="ayudas-expand-cell"><span class="material-icons ayudas-expand-icon">' + expandIcon + '</span></td>';
-    html += '<td><strong>' + escHtml(r.nombre_completo || "-") + '</strong></td>';
+    html += '<td><strong>' + escHtml(r.nombre_completo || "-") + '</strong>' + (cisAporteAnticipo(r).mejorada ? ' <span class="estado-badge estado-mejorada" title="Tiene participaciones nuevas: todas mejoradas">✦ MEJORADA</span>' : '') + '</td>';
     html += '<td>' + escHtml(cisDocNumber(r)) + '</td>';
     html += '<td>' + flag + ' ' + escHtml(r.pais || "-") + '</td>';
     html += '<td>' + (r.tipo_documento || "-") + '</td>';
@@ -2210,6 +2229,7 @@ function renderCisTable() {
 function buildCisDetailHtml(r) {
   const f = (v) => v && String(v).trim() && String(v).trim() !== "VACIO" ? String(v).trim() : "-";
   const flag = getCountryFlag(r.pais);
+  const calc = cisAporteAnticipo(r);
   const rows = [
     { icon: "badge", label: "Tipo documento", val: f(r.tipo_documento) },
     { icon: "fingerprint", label: "Pasaporte", val: f(r.pasaporte) },
@@ -2228,6 +2248,8 @@ function buildCisDetailHtml(r) {
     { icon: "pin", label: "Codigo postal", val: f(r.codigo_postal) },
     { icon: "telegram", label: "Telegram", val: r.telegram ? "@" + String(r.telegram).replace(/^@/, "") : "-" },
     { icon: "paid", label: "Cantidad participacion", val: f(r.cantidad_participacion) },
+    { icon: "fiber_new", label: "Participaciones nuevas", val: f(r.cantidad_participaciones_nuevas) },
+    { icon: "paid", label: "Aporte/Anticipo", val: calc.texto + (calc.mejorada ? " ✦ MEJORADA" : "") },
   ];
   const items = rows.map((x) => '<div class="ayudas-detail-item"><span class="material-icons ayudas-detail-icon">' + x.icon + '</span><span class="ayudas-detail-label">' + x.label + '</span><span class="ayudas-detail-value">' + x.val + '</span></div>').join("");
   const estadoBtn = r.habilitado
