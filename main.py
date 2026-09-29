@@ -1287,14 +1287,123 @@ async def get_cis_stats():
 
 @app.get("/api/cis/download")
 async def download_cis_xlsx():
+    from openpyxl.styles import Font, PatternFill, Alignment
+
     result = supabase_inventario.table(CIS_TABLE).select("*").order("nombre_completo").execute()
     rows = result.data or []
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "CIS"
+    # ---- calculos por persona (misma regla del banner) ----
+    calc = []
+    for r in rows:
+        ap, an, mej = aporte_anticipo(r.get("cantidad_participacion"),
+                                      r.get("cantidad_participaciones_nuevas"))
+        calc.append((r, ap, an, mej))
+    total_aporte = sum(c[1] for c in calc)
+    total_anticipo = sum(c[2] for c in calc)
+    personas_mejoradas = sum(1 for c in calc if c[3])
+    habilitados = sum(1 for r in rows if r.get("habilitado"))
 
-    headers = [
+    wb = Workbook()
+
+    header_fill = PatternFill(start_color="7E57C2", end_color="7E57C2", fill_type="solid")
+    header_font = Font(bold=True, size=11, color="FFFFFF")
+    title_font = Font(bold=True, size=14, color="4527A0")
+    total_fill = PatternFill(start_color="EDE7F6", end_color="EDE7F6", fill_type="solid")
+    total_font = Font(bold=True, size=11)
+
+    def style_header(ws, ncols=None):
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 22
+
+    def autosize(ws, max_width=50):
+        for column in ws.columns:
+            max_len = 0
+            col_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    val = str(cell.value) if cell.value is not None else ""
+                    max_len = max(max_len, len(val))
+                except Exception:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_len + 4, max_width)
+
+    hoy = datetime.now(COL_TZ)
+    fecha_str = f"{hoy.day:02d}/{hoy.month:02d}/{hoy.year}"
+
+    # ============ HOJA 1: Resumen ============
+    ws = wb.active
+    ws.title = "Resumen"
+    ws["A1"] = "BOT-CIS — Reporte de participaciones"
+    ws["A1"].font = title_font
+    ws["A2"] = f"Generado el {fecha_str} · {len(rows)} personas"
+    resumen = [
+        ("Total personas", len(rows)),
+        ("Habilitados", habilitados),
+        ("Personas mejoradas (con participaciones nuevas)", personas_mejoradas),
+        ("Total Aporte", total_aporte),
+        ("Total Anticipo", total_anticipo),
+        ("Aporte/Anticipo", "%s/%s" % (_fmt_miles(total_aporte), _fmt_miles(total_anticipo))),
+    ]
+    ws.append([])  # fila 3 vacia
+    ws.append(["Concepto", "Valor"])  # fila 4
+    for cell in ws[4]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[4].height = 22
+    for concepto, valor in resumen:
+        ws.append([concepto, valor])
+    for row in ws.iter_rows(min_row=5, max_row=10, min_col=2, max_col=2):
+        for cell in row:
+            if isinstance(cell.value, int):
+                cell.number_format = "#,##0"
+    autosize(ws)
+
+    # ============ HOJA 2: Personas (simple, para coworkers) ============
+    ws2 = wb.create_sheet("Personas")
+    headers2 = ["#", "Nombre Completo", "Documento", "Telegram", "Pais",
+                "Normales", "Nuevas", "Mejorada", "Aporte", "Anticipo", "Habilitado"]
+    ws2.append(headers2)
+    style_header(ws2)
+    for i, (r, ap, an, mej) in enumerate(calc, 1):
+        ws2.append([
+            i,
+            r.get("nombre_completo") or "-",
+            cis_doc_simple(r),
+            ("@" + str(r.get("telegram")).lstrip("@")) if r.get("telegram") else "-",
+            r.get("pais") or "-",
+            _num_coax(r.get("cantidad_participacion")),
+            _num_coax(r.get("cantidad_participaciones_nuevas")),
+            "Si" if mej else "No",
+            ap,
+            an,
+            "Si" if r.get("habilitado") else "No",
+        ])
+    n_data = len(calc)
+    if n_data:
+        last = n_data + 1  # ultima fila de datos (cabecera = fila 1)
+        ws2.append(["", "TOTAL", "", "", "", "",
+                    "", "",
+                    f"=SUM(I2:I{last})", f"=SUM(J2:J{last})", ""])
+        for cell in ws2[n_data + 2]:
+            cell.fill = total_fill
+            cell.font = total_font
+        for row in ws2.iter_rows(min_row=2, max_row=n_data + 2, min_col=9, max_col=10):
+            for cell in row:
+                cell.number_format = "#,##0"
+    for row in ws2.iter_rows(min_row=2, max_row=n_data + 1, min_col=6, max_col=7):
+        for cell in row:
+            cell.number_format = "0"
+    ws2.auto_filter.ref = f"A1:K{n_data + 2 if n_data else 1}"
+    ws2.freeze_panes = "A2"
+    autosize(ws2)
+
+    # ============ HOJA 3: Detalle completo (dump anterior + 4 columnas) ============
+    ws3 = wb.create_sheet("Detalle completo")
+    headers3 = [
         "Nombre Completo", "Tipo Documento", "Pasaporte", "CC",
         "Primer Nombre", "Segundo Nombre", "Apellidos", "Genero",
         "Fecha Nacimiento", "SSN", "Pais Ciudadania", "Idiomas",
@@ -1302,13 +1411,15 @@ async def download_cis_xlsx():
         "Autoridad Emisora", "Oficial", "Direccion", "Ciudad",
         "Departamento", "Pais", "Pais Legal", "Pais Residencia",
         "Codigo Postal", "Urbanizacion", "Distrito",
-        "Telegram", "Cantidad Participacion", "Habilitado",
+        "Telegram", "Cantidad Participacion", "Participaciones Nuevas",
+        "Aporte", "Anticipo", "Mejorada", "Habilitado",
         "Fecha Creacion", "Ultima Actualizacion",
     ]
-    ws.append(headers)
+    ws3.append(headers3)
+    style_header(ws3)
 
-    for r in rows:
-        ws.append([
+    for r, ap, an, mej in calc:
+        ws3.append([
             r.get("nombre_completo") or "-",
             r.get("tipo_documento") or "-",
             r.get("pasaporte") or "-",
@@ -1338,40 +1449,37 @@ async def download_cis_xlsx():
             r.get("distrito") or "-",
             r.get("telegram") or "-",
             r.get("cantidad_participacion") or 0,
+            _num_coax(r.get("cantidad_participaciones_nuevas")),
+            ap,
+            an,
+            "Si" if mej else "No",
             "Si" if r.get("habilitado") else "No",
             formatear_fecha_simple(r.get("created_at")),
             formatear_fecha_simple(r.get("updated_at")),
         ])
-
-    from openpyxl.styles import Font, PatternFill
-    header_fill = PatternFill(start_color="7E57C2", end_color="7E57C2", fill_type="solid")
-    header_font = Font(bold=True, size=11)
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-
-    for column in ws.columns:
-        max_len = 0
-        col_letter = column[0].column_letter
-        for cell in column:
-            try:
-                val = str(cell.value) if cell.value else ""
-                max_len = max(max_len, len(val))
-            except Exception:
-                pass
-        ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+    for row in ws3.iter_rows(min_row=2, max_row=len(calc) + 1, min_col=32, max_col=33):
+        for cell in row:
+            cell.number_format = "#,##0"
+    ws3.freeze_panes = "A2"
+    autosize(ws3, max_width=40)
 
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
 
-    hoy = datetime.now(COL_TZ)
     filename = f"CIS_{hoy.day:02d}-{hoy.month:02d}-{hoy.year}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def cis_doc_simple(r):
+    """Documento principal segun tipo (igual que la tabla web)."""
+    if (r.get("tipo_documento") or "").upper() == "ID":
+        return r.get("cc") or "-"
+    return r.get("pasaporte") or r.get("cc") or "-"
 
 
 def _clean_cis_value(v):
